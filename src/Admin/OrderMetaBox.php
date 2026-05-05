@@ -25,7 +25,13 @@ class OrderMetaBox {
     }
 
     public static function render($object): void {
-        $order_id = is_object($object) ? (int) $object->get_id() : (int) $object;
+        if (is_object($object) && method_exists($object, 'get_id')) {
+            $order_id = (int) $object->get_id();
+        } elseif (is_object($object) && isset($object->ID)) {
+            $order_id = (int) $object->ID;
+        } else {
+            $order_id = (int) $object;
+        }
         $order    = wc_get_order($order_id);
         if (!$order) {
             return;

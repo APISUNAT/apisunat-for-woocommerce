@@ -19,6 +19,7 @@ class SettingsPage {
         add_action('wp_ajax_apisunat_enable_tax',         [self::class, 'ajaxEnableTax']);
         add_action('wp_ajax_apisunat_create_tax_classes', [self::class, 'ajaxCreateTaxClasses']);
         add_action('wp_ajax_apisunat_delete_tax_rate',    [self::class, 'ajaxDeleteTaxRate']);
+        add_action('admin_post_apisunatv2_save',         [self::class, 'handleSave']);
     }
 
     public static function addMenu(): void {
@@ -33,29 +34,25 @@ class SettingsPage {
     }
 
     public static function registerSettings(): void {
-        register_setting('apisunatv2_group', Options::OPTION_KEY, [
-            'sanitize_callback' => [self::class, 'sanitize'],
-        ]);
+        // No usar register_setting/add_settings_field para evitar errores de memoria
+        // El formulario se renderiza manualmente en render()
+    }
 
-        foreach (self::schema() as $section) {
-            add_settings_section(
-                $section['id'],
-                $section['title'],
-                $section['desc'] ?? '__return_false',
-                'apisunatv2_settings'
-            );
-
-            foreach ($section['fields'] as $field) {
-                add_settings_field(
-                    $field['key'],
-                    $field['label'],
-                    [self::class, 'renderField'],
-                    'apisunatv2_settings',
-                    $section['id'],
-                    $field
-                );
-            }
+    public static function handleSave(): void {
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(esc_html__('Permiso denegado', 'apisunatv2'));
         }
+        check_admin_referer('apisunatv2_settings_save');
+        
+        $input = isset($_POST[Options::OPTION_KEY]) && is_array($_POST[Options::OPTION_KEY]) 
+            ? $_POST[Options::OPTION_KEY] 
+            : [];
+        
+        $sanitized = self::sanitize($input);
+        Options::set($sanitized);
+        
+        wp_redirect(add_query_arg(['updated' => '1'], wp_get_referer()));
+        exit;
     }
 
     public static function sanitize(array $input): array {
@@ -394,8 +391,9 @@ class SettingsPage {
                     <button type="button" id="sync-pending-btn" class="button button-secondary"><?= esc_html__('Sincronizar', 'apisunatv2') ?></button>
                 </div>
 
-                <form method="post" action="options.php" id="apisunat-form">
-                    <?php settings_fields('apisunatv2_group'); ?>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <input type="hidden" name="action" value="apisunatv2_save">
+                    <?php wp_nonce_field('apisunatv2_settings_save'); ?>
                     <table class="form-table" role="presentation">
                         <?php
                         $schema    = self::schema();
@@ -656,22 +654,31 @@ class SettingsPage {
                         }
                         echo ' <span id="apisunat-tax-result" role="status" aria-live="polite"></span>';
                         echo '</p>';
-                    } else {
-                        echo '<p class="notice notice-success" style="padding:8px;">';
-                        echo esc_html__('Tasas IGV configuradas:', 'apisunatv2');
-                        echo '<ul style="margin:4px 0 0 0;padding-left:16px;list-style:disc;">';
-                        foreach ($rates as $rate) {
-                            $pct = is_object($rate) && isset($rate->tax_rate) ? $rate->tax_rate : '?';
-                            $name = is_object($rate) && isset($rate->tax_rate_name) ? $rate->tax_rate_name : 'IGV';
-                            $id = is_object($rate) && isset($rate->tax_rate_id) ? $rate->tax_rate_id : 0;
-                            echo '<li>' . esc_html($name . ': ' . $pct . '%');
-                            if ($id) {
-                                echo ' <button type="button" class="button button-small button-link-delete apisunat-delete-tax" data-rate-id="' . esc_attr($id) . '" style="margin-left:8px;">' . esc_html__('Eliminar', 'apisunatv2') . '</button>';
-                            }
-                            echo '</li>';
-                        }
-                        echo '</ul></p>';
-                    }
+} else {
+    $rate_count = count($rates);
+    if ($rate_count > 1) {
+        echo '<p class="notice notice-error" style="padding:8px;">';
+        echo esc_html(sprintf(
+            __('Error: Solo debe mantener 1 tasa IGV en la clase estándar para que el plugin funcione correctamente. Actualmente tiene %d tasas. Elimine las sobrantes.', 'apisunatv2'),
+            $rate_count
+        ));
+    } else {
+        echo '<p class="notice notice-success" style="padding:8px;">';
+        echo esc_html__('Tasa IGV configurada correctamente:', 'apisunatv2');
+    }
+    echo '<ul style="margin:4px 0 0 0;padding-left:16px;list-style:disc;">';
+    foreach ($rates as $rate) {
+        $pct = is_object($rate) && isset($rate->tax_rate) ? $rate->tax_rate : '?';
+        $name = is_object($rate) && isset($rate->tax_rate_name) ? $rate->tax_rate_name : 'IGV';
+        $id = is_object($rate) && isset($rate->tax_rate_id) ? $rate->tax_rate_id : 0;
+        echo '<li>' . esc_html($name . ': ' . $pct . '%');
+        if ($id) {
+            echo ' <button type="button" class="button button-small button-link-delete apisunat-delete-tax" data-rate-id="' . esc_attr($id) . '" style="margin-left:8px;">' . esc_html__('Eliminar', 'apisunatv2') . '</button>';
+        }
+        echo '</li>';
+    }
+    echo '</ul></p>';
+}
 
                     global $wpdb;
                     $table = $wpdb->prefix . 'wc_tax_rate_classes';

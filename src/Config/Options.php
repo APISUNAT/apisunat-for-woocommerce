@@ -11,28 +11,34 @@ class Options {
         if (self::$cache !== null) {
             return self::$cache;
         }
-        $saved      = get_option(self::OPTION_KEY, []);
-        $saved      = is_array($saved) ? $saved : [];
-        self::$cache = array_replace_recursive(Defaults::get(), $saved);
+
+        $defaults = Defaults::get();
+        $saved = [];
+
+        // Cargar cada sección por separado (opciones pequeñas)
+        foreach (array_keys($defaults) as $section) {
+            $value = get_option(self::OPTION_KEY . '_' . $section, null);
+            if ($value !== null) {
+                $saved[$section] = is_array($value) ? $value : [];
+            }
+        }
+
+        self::$cache = array_replace_recursive($defaults, $saved);
         return self::$cache;
     }
 
     public static function set(array $data): void {
-        global $wpdb;
         if (!is_array($data)) {
             return;
         }
-        $serialized = maybe_serialize($data);
-        $wpdb->query(
-            $wpdb->prepare(
-                "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) 
-                 VALUES (%s, %s, 'no') 
-                 ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)",
-                self::OPTION_KEY,
-                $serialized
-            )
-        );
-        wp_cache_delete(self::OPTION_KEY, 'options');
+
+        // Guardar cada sección en una opción separada (pequeña)
+        foreach ($data as $section => $value) {
+            if (is_array($value)) {
+                update_option(self::OPTION_KEY . '_' . $section, $value, false);
+            }
+        }
+
         self::flushCache();
     }
 
