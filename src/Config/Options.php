@@ -18,11 +18,21 @@ class Options {
     }
 
     public static function set(array $data): void {
-        // Actualizar solo los cambios sin cargar todo el array
+        global $wpdb;
         if (!is_array($data)) {
             return;
         }
-        update_option(self::OPTION_KEY, $data, false);
+        $serialized = maybe_serialize($data);
+        $wpdb->query(
+            $wpdb->prepare(
+                "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) 
+                 VALUES (%s, %s, 'no') 
+                 ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)",
+                self::OPTION_KEY,
+                $serialized
+            )
+        );
+        wp_cache_delete(self::OPTION_KEY, 'options');
         self::flushCache();
     }
 
