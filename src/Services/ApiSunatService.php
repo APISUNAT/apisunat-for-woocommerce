@@ -253,6 +253,28 @@ class ApiSunatService {
 
         $response = wp_remote_request($url, $args);
 
+        if (function_exists('wc_get_order') && isset($body['order']['id'])) {
+            $order_id = $body['order']['id'];
+            $order = wc_get_order($order_id);
+            if ($order) {
+                $request_data = [
+                    'method' => $method,
+                    'url'    => $url,
+                    'body'   => $body,
+                ];
+                $order->update_meta_data('_apisunat_request', wp_json_encode($request_data));
+
+                if (!is_wp_error($response)) {
+                    $response_code = (int) wp_remote_retrieve_response_code($response);
+                    $response_body = (string) wp_remote_retrieve_body($response);
+                    $order->update_meta_data('_apisunat_response_code', $response_code);
+                    // Solo guardar primeros 5000 caracteres del response
+                    $order->update_meta_data('_apisunat_response', $response_body);
+                }
+                $order->save();
+            }
+        }
+
         if (is_wp_error($response)) {
             self::logger()->error('WP HTTP error', ['error' => $response->get_error_message()]);
             throw new ApiRequestException($response->get_error_message(), 0);

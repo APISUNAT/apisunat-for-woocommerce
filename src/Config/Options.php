@@ -18,6 +18,10 @@ class Options {
     }
 
     public static function set(array $data): void {
+        // Actualizar solo los cambios sin cargar todo el array
+        if (!is_array($data)) {
+            return;
+        }
         update_option(self::OPTION_KEY, $data, false);
         self::flushCache();
     }

@@ -59,8 +59,8 @@ class SettingsPage {
     }
 
     public static function sanitize(array $input): array {
-        $existing = get_option(Options::OPTION_KEY, []);
-        $output   = is_array($existing) ? $existing : [];
+        // Cargar solo si es necesario y de forma parcial
+        $output = [];
 
         if (isset($input['api']) && is_array($input['api'])) {
             $output['api']['meta_key'] = sanitize_text_field((string) ($input['api']['meta_key'] ?? ''));
