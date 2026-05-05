@@ -1,0 +1,150 @@
+/* ===== Status badges ===== */
+.sunat-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.sunat-status.aceptado {
+    background: #c6e4b7;
+    color: #286625;
+}
+.sunat-status.pendiente {
+    background: #fff3cd;
+    color: #856404;
+}
+.sunat-status.error,
+.sunat-status.excepcion,
+.sunat-status.rechazado {
+    background: #f5c6cb;
+    color: #721c24;
+}
+
+/* ===== Buttons ===== */
+.sunat-emit-btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.apisunat-void-btn {
+    background: #e25c5c;
+    border-color: #c04040;
+    color: #fff;
+}
+.apisunat-void-btn:hover,
+.apisunat-void-btn:focus {
+    background: #c04040;
+    border-color: #a03030;
+    color: #fff;
+}
+
+/* ===== Settings page ===== */
+.apisunatv2-settings .nav-tab-wrapper {
+    margin-top: 15px;
+    border-bottom: 1px solid #ccc;
+}
+.apisunat-status-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    align-items: center;
+    padding: 16px 20px;
+    margin: 15px 0 20px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+.apisunat-stat {
+    display: flex;
+    flex-direction: column;
+}
+.apisunat-stat .label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.apisunat-stat .value {
+    font-size: 20px;
+    font-weight: 600;
+    color: #333;
+}
+.apisunat-stat-error {
+    color: #d63638 !important;
+}
+.notice-error {
+    background: #f2dede;
+    border-left: 4px solid #d63638;
+}
+.notice-warning {
+    background: #fff8e5;
+    border-left: 4px solid #ffba00;
+}
+.notice-success {
+    background: #dff0d8;
+    border-left: 4px solid #46b450;
+}
+
+/* ===== Checkout fields ===== */
+.sunat-checkout-fields {
+    margin-bottom: 24px;
+}
+.apisunat-loading {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-left: 6px;
+    border: 2px solid #ccc;
+    border-top-color: #2271b1;
+    border-radius: 50%;
+    animation: apisunat-spin 0.7s linear infinite;
+    vertical-align: middle;
+}
+@keyframes apisunat-spin {
+    to { transform: rotate(360deg); }
+}
+
+.apisunatv2-logs .apisunat-log-viewer {
+    margin-top: 15px;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 15px;
+    border-radius: 4px;
+    max-height: 70vh;
+    overflow-y: auto;
+    font-family: Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.apisunatv2-logs .apisunat-log-empty {
+    color: #888;
+}
+.apisunatv2-logs .apisunat-log-error {
+    color: #f44747;
+}
+.apisunatv2-logs .apisunat-log-info {
+    color: #4ec9b0;
+}
+.apisunatv2-logs .apisunat-log-debug {
+    color: #6a9955;
+}
+.apisunatv2-logs .apisunat-log-path {
+    margin-top: 10px;
+}
+
+/* ===== Order meta box ===== */
+#sunatVoidReason {
+    margin-top: 8px;
+}
+#sunatVoidReason textarea {
+    width: 100%;
+    min-height: 60px;
+}
+#sunatVoidReason button {
+    margin-top: 4px;
+}
+.order_sunat_fields .form-field-wide select,
+.order_sunat_fields .form-field-wide input {
+    width: 100%;
+}

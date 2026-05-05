@@ -1,0 +1,21 @@
+{
+    "name": "atm/apisunatv2",
+    "version": "2.0.0",
+    "type": "wordpress-plugin",
+    "license": "GPL-3.0-or-later",
+    "require": {
+        "php": ">=8.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Atm\\Apisunatwp\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Ronald Fernandez",
+            "email": "ronald.fernandez@activatumype.com"
+        }
+    ],
+    "minimum-stability": "stable"
+}
