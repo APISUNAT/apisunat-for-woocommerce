@@ -209,12 +209,15 @@ class CheckoutHooks {
         }
 
         if ($cpeType === '01') {
-            $company = isset($_POST['billing_company']) ? sanitize_text_field(wp_unslash($_POST['billing_company'])) : '';
-            if ($company === '') {
-                $errors->add('apisunat_company', __('Empresa requerida para Factura', 'apisunatv2'));
-            }
             if ($docType !== '6') {
                 $errors->add('apisunat_ruc_required', __('RUC requerido para Factura', 'apisunatv2'));
+            }
+            // Solo exigir billing_company si el campo está presente en el formulario
+            if (isset($_POST['billing_company'])) {
+                $company = sanitize_text_field(wp_unslash($_POST['billing_company']));
+                if ($company === '') {
+                    $errors->add('apisunat_company', __('Empresa requerida para Factura', 'apisunatv2'));
+                }
             }
         }
 
