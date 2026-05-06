@@ -135,33 +135,6 @@
             });
         });
 
-        // Setup tax rate (any percentage via data-rate)
-        $(document).on('click', '.apisunat-setup-tax', function (e) {
-            e.preventDefault();
-            var $btn = $(this);
-            var $result = $('#apisunat-tax-result');
-            var rate = $btn.data('rate');
-            $btn.prop('disabled', true);
-            $result.text(i18n.verifying || '');
-
-            $.post(ajaxUrl, {
-                action: 'apisunat_setup_tax_rate',
-                nonce: nonce,
-                rate: rate
-            }).done(function (res) {
-                if (res && res.success) {
-                    $result.removeClass('error').addClass('success').text(res.data.message);
-                    setTimeout(function () { location.reload(); }, 1000);
-                } else {
-                    $result.removeClass('success').addClass('error').text((res && res.data && res.data.message) || i18n.connError || '');
-                }
-            }).fail(function () {
-                $result.removeClass('success').addClass('error').text(i18n.connError || '');
-            }).always(function () {
-                $btn.prop('disabled', false);
-            });
-        });
-
         // Delete tax rate
         $(document).on('click', '.apisunat-delete-tax', function (e) {
             e.preventDefault();

@@ -9,10 +9,12 @@ class TaxMapper {
     public const GRATUITO  = '40';
 
     private static array $slugToSunat = [
-        'standard'     => self::GRAVADO,
-        'exonerado'    => self::EXONERADO,
-        'inafecto'     => self::INAFECTO,
-        'gratuito'     => self::GRATUITO,
+        'standard'       => self::GRAVADO,
+        'gravado10'     => self::GRAVADO,
+        'gravado105'   => self::GRAVADO,
+        'exonerado'      => self::EXONERADO,
+        'inafecto'       => self::INAFECTO,
+        'gratuito'       => self::GRATUITO,
     ];
 
     public static function resolve(string $tax_class = ''): string {

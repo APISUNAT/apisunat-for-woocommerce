@@ -90,8 +90,9 @@ class ApiSunatService {
         }
 
         $payload = self::buildPayload($order, $branch);
-        $payload['plugin_data']['serie07F'] = (string) Options::getValue('emision.series.nota_credito_factura', 'FC01');
-        $payload['plugin_data']['serie07B'] = (string) Options::getValue('emision.series.nota_credito_boleta', 'BC01');
+        $branchSeries = $branch['series'] ?? [];
+        $payload['plugin_data']['serie07F'] = !empty($branchSeries['nota_credito_factura']) ? $branchSeries['nota_credito_factura'] : (string) Options::getValue('emision.series.nota_credito_factura', 'FC01');
+        $payload['plugin_data']['serie07B'] = !empty($branchSeries['nota_credito_boleta']) ? $branchSeries['nota_credito_boleta'] : (string) Options::getValue('emision.series.nota_credito_boleta', 'BC01');
         $payload['document_data'] = [
             'reason'         => $reason,
             'documentId'     => $docId,
@@ -185,12 +186,16 @@ class ApiSunatService {
     }
 
     private static function pluginConfig(array $branch): array {
+        $branchSeries = $branch['series'] ?? [];
+        $serieFactura = !empty($branchSeries['factura']) ? $branchSeries['factura'] : (string) Options::getValue('emision.series.factura', 'F001');
+        $serieBoleta  = !empty($branchSeries['boleta']) ? $branchSeries['boleta'] : (string) Options::getValue('emision.series.boleta', 'B001');
+
         return [
             'personaId'          => $branch['persona_id'],
             'personaToken'       => $branch['persona_token'],
             'noDocId'            => Options::getValue('documento_cliente.no_doc') ? 'true' : 'false',
-            'serie01'            => (string) Options::getValue('emision.series.factura', 'F001'),
-            'serie03'            => (string) Options::getValue('emision.series.boleta', 'B001'),
+            'serie01'            => $serieFactura,
+            'serie03'            => $serieBoleta,
             'affectation'        => TaxMapper::resolve(),
             'affectation_factor' => (string) self::getWcTaxRate(),
             //'issueTime'          => Options::getValue('emision.include_time') ? 'true' : 'false',

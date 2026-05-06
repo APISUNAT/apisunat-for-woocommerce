@@ -12,6 +12,12 @@ class Defaults {
                         'label'        => 'Principal',
                         'persona_id'    => '',
                         'persona_token' => '',
+                        'series'        => [
+                            'factura'             => '',
+                            'boleta'              => '',
+                            'nota_credito_factura' => '',
+                            'nota_credito_boleta'  => '',
+                        ],
                     ],
                 ],
             ],

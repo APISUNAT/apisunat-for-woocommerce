@@ -79,7 +79,7 @@ class Options {
     public static function resolveBranch(?\WC_Order $order = null): array {
         $branches = self::getValue('api.branches', []);
         if (empty($branches) || !is_array($branches)) {
-            return ['persona_id' => '', 'persona_token' => ''];
+            return ['persona_id' => '', 'persona_token' => '', 'series' => []];
         }
 
         $metaKey = trim((string) self::getValue('api.meta_key', ''));
@@ -91,6 +91,7 @@ class Options {
                         return [
                             'persona_id'    => (string) ($branch['persona_id']    ?? ''),
                             'persona_token' => (string) ($branch['persona_token'] ?? ''),
+                            'series'        => (array) ($branch['series']        ?? []),
                         ];
                     }
                 }
@@ -101,6 +102,7 @@ class Options {
         return [
             'persona_id'    => (string) ($first['persona_id']    ?? ''),
             'persona_token' => (string) ($first['persona_token'] ?? ''),
+            'series'        => (array) ($first['series']        ?? []),
         ];
     }
 

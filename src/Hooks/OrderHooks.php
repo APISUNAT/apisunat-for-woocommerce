@@ -7,8 +7,7 @@ use Atm\Apisunatwp\Jobs\SendOrderJob;
 class OrderHooks {
 
     public static function register(): void {
-        // Registrar todos los posibles hooks de estado
-        $estados = ['completed', 'processing', 'on-hold'];
+        $estados = ['completed', 'processing', 'on-hold', 'pending'];
         foreach ($estados as $estado) {
             add_action('woocommerce_order_status_' . $estado, [self::class, 'handle']);
         }
@@ -26,7 +25,6 @@ class OrderHooks {
             return;
         }
 
-        // Verificar si el estado actual coincide con el configurado
         $estado_config = Options::getValue('emision.estado_emision', 'wc-completed');
         $estado_actual = 'wc-' . $order->get_status();
         if ($estado_actual !== $estado_config) {
