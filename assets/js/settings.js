@@ -162,6 +162,13 @@
             });
         });
 
+        $(document).on('click', '.apisunat-toggle-token', function (e) {
+            e.preventDefault();
+            var $input = $(this).closest('.branch-row').find('.apisunat-token-input');
+            if (!$input.length) return;
+            $input.attr('type', $input.attr('type') === 'password' ? 'text' : 'password');
+        });
+
         fetchStats(false);
     });
 })(jQuery);

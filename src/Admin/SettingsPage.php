@@ -479,7 +479,8 @@ class SettingsPage {
                 <div class="branch-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;">
                     <input type="text" name="<?= esc_attr($baseName . '][' . $i) ?>][label]" value="<?= esc_attr($branch['label'] ?? '') ?>" placeholder="<?= esc_attr__('Etiqueta', 'apisunatv2') ?>" class="regular-text">
                     <input type="text" name="<?= esc_attr($baseName . '][' . $i) ?>][persona_id]" value="<?= esc_attr($branch['persona_id'] ?? '') ?>" placeholder="<?= esc_attr__('Persona ID', 'apisunatv2') ?>" class="regular-text">
-                    <input type="text" name="<?= esc_attr($baseName . '][' . $i) ?>][persona_token]" value="<?= esc_attr($branch['persona_token'] ?? '') ?>" placeholder="<?= esc_attr__('Persona Token', 'apisunatv2') ?>" class="regular-text">
+                    <input type="password" name="<?= esc_attr($baseName . '][' . $i) ?>][persona_token]" value="<?= esc_attr($branch['persona_token'] ?? '') ?>" placeholder="<?= esc_attr__('Persona Token', 'apisunatv2') ?>" class="regular-text apisunat-token-input" autocomplete="new-password">
+                    <button type="button" class="button apisunat-toggle-token" aria-label="<?= esc_attr__('Mostrar/ocultar token', 'apisunatv2') ?>">👁</button>
                     <button type="button" class="button button-secondary apisunat-remove-branch"><?= esc_html__('Eliminar', 'apisunatv2') ?></button>
                     <button type="button" class="button button-primary apisunat-test-branch"><?= esc_html__('Verificar', 'apisunatv2') ?></button>
                     <span class="apisunat-branch-result" role="status" aria-live="polite"></span>
@@ -517,7 +518,8 @@ class SettingsPage {
                 var idx = wrap.querySelectorAll('.branch-row').length;
                 div.innerHTML = '<input type="text" name="<?= esc_attr($baseName) ?>[' + idx + '][label]" placeholder="<?= esc_attr__('Etiqueta', 'apisunatv2') ?>" class="regular-text">' +
                     '<input type="text" name="<?= esc_attr($baseName) ?>[' + idx + '][persona_id]" placeholder="<?= esc_attr__('Persona ID', 'apisunatv2') ?>" class="regular-text">' +
-                    '<input type="text" name="<?= esc_attr($baseName) ?>[' + idx + '][persona_token]" placeholder="<?= esc_attr__('Persona Token', 'apisunatv2') ?>" class="regular-text">' +
+                    '<input type="password" name="<?= esc_attr($baseName) ?>[' + idx + '][persona_token]" placeholder="<?= esc_attr__('Persona Token', 'apisunatv2') ?>" class="regular-text apisunat-token-input" autocomplete="new-password">' +
+                    '<button type="button" class="button apisunat-toggle-token" aria-label="<?= esc_attr__('Mostrar/ocultar token', 'apisunatv2') ?>">👁</button>' +
                     '<button type="button" class="button button-secondary apisunat-remove-branch"><?= esc_html__('Eliminar', 'apisunatv2') ?></button>' +
                     '<button type="button" class="button button-primary apisunat-test-branch"><?= esc_html__('Verificar', 'apisunatv2') ?></button>' +
                     '<span class="apisunat-branch-result" role="status" aria-live="polite"></span>' +
