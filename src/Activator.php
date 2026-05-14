@@ -62,34 +62,37 @@ class Activator {
             return;
         }
 
-        $existing = \WC_Tax::find_rates([
-            'country'   => 'PE',
-            'tax_class' => '',
+        $ratesTable = $wpdb->prefix . 'woocommerce_tax_rates';
+        $existingIgvCount = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(1) FROM {$ratesTable}
+             WHERE tax_rate_country = %s
+               AND tax_rate_class = %s
+               AND tax_rate BETWEEN %f AND %f",
+            'PE',
+            '',
+            17.5,
+            18.5
+        ));
+
+        if ($existingIgvCount > 0) {
+            update_option('apisunat_tax_setup_done', '1');
+            return;
+        }
+
+        $rateId = (int) \WC_Tax::_insert_tax_rate([
+            'tax_rate_country'  => 'PE',
+            'tax_rate_state'    => '',
+            'tax_rate'          => '18',
+            'tax_rate_name'     => 'IGV',
+            'tax_rate_priority' => 1,
+            'tax_rate_compound' => 0,
+            'tax_rate_shipping' => 1,
+            'tax_rate_order'    => 0,
+            'tax_rate_class'    => '',
         ]);
 
-        $hasIgv = false;
-        foreach ($existing as $rate) {
-            $value = (float) ($rate['rate'] ?? 0);
-            if ($value >= 17.5 && $value <= 18.5) {
-                $hasIgv = true;
-                break;
-            }
+        if ($rateId > 0) {
+            update_option('apisunat_tax_setup_done', '1');
         }
-
-        if (!$hasIgv) {
-            \WC_Tax::_insert_tax_rate([
-                'tax_rate_country'  => 'PE',
-                'tax_rate_state'    => '',
-                'tax_rate'          => '18',
-                'tax_rate_name'     => 'IGV',
-                'tax_rate_priority' => 1,
-                'tax_rate_compound' => 0,
-                'tax_rate_shipping' => 1,
-                'tax_rate_order'    => 0,
-                'tax_rate_class'    => '',
-            ]);
-        }
-
-        update_option('apisunat_tax_setup_done', '1');
     }
 }
