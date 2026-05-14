@@ -35,13 +35,13 @@ class ApiSunatService {
         $key = 'apisunat_send_lock_' . $orderId;
         // add_option is atomic at the DB level (UNIQUE constraint on option_name):
         // returns true on first writer, false if option already exists.
-        if (add_option($key, time() + 60, '', 'no')) {
+        if (add_option($key, time() + 135, '', 'no')) {
             return true;
         }
         // Lock present — check if it has expired (stale lock from a crashed process).
         $expires = (int) get_option($key, 0);
         if ($expires > 0 && $expires < time()) {
-            update_option($key, time() + 60, false);
+            update_option($key, time() + 135, false);
             return true;
         }
         return false;
