@@ -125,16 +125,6 @@ class CheckoutHooks {
         if ($updated) {
             $order->save();
         }
-
-        if ($order->get_meta('_billing_apisunat_cpe_type', true)
-            && $order->get_meta('_billing_apisunat_id_type', true)
-            && $order->get_meta('_billing_apisunat_id_number', true)) {
-            try {
-                \Atm\Apisunatwp\Services\ApiSunatService::send($order_id);
-            } catch (\Throwable $e) {
-                $order->add_order_note('API Sunat: ' . $e->getMessage());
-            }
-        }
     }
 
     private static function registerClassicCheckout(): void {
@@ -156,7 +146,6 @@ class CheckoutHooks {
         $idNumber = (string) WC()->checkout->get_value('_billing_apisunat_id_number');
         ?>
         <div class="sunat-checkout-fields">
-            <h3><?= esc_html__('Datos para facturación', 'apisunatv2') ?></h3>
             <p class="form-row form-row-wide" id="_billing_apisunat_cpe_type_field">
                 <label for="_billing_apisunat_cpe_type"><?= esc_html__('Comprobante', 'apisunatv2') ?>&nbsp;<abbr class="required" title="required">*</abbr></label>
                 <select name="_billing_apisunat_cpe_type" id="_billing_apisunat_cpe_type" class="select" required>
@@ -183,10 +172,29 @@ class CheckoutHooks {
 
     private static function documentPattern(string $type): string {
         return match ($type) {
-            '6'     => '/^[12][0567]\d{9}$/',
+            '6'     => '/^(10|15|17|20)\d{9}$/',
             '1'     => '/^\d{8}$/',
             default => '/^[a-zA-Z0-9]{1,15}$/',
         };
+    }
+
+    private static function isValidRuc(string $ruc): bool
+    {
+        if (!preg_match('/^(10|15|17|20)\d{9}$/', $ruc)) {
+            return false;
+        }
+
+        $factors = [5,4,3,2,7,6,5,4,3,2];
+        $sum = 0;
+
+        for ($i = 0; $i < 10; $i++) {
+            $sum += (int)$ruc[$i] * $factors[$i];
+        }
+
+        $rest = 11 - ($sum % 11);
+        $digit = $rest === 10 ? 0 : ($rest === 11 ? 1 : $rest);
+
+        return (int)$ruc[10] === $digit;
     }
 
     private static function documentErrorLabel(string $type): string {
@@ -205,6 +213,8 @@ class CheckoutHooks {
         if ($docType !== '' && $docNumber !== '') {
             if (!preg_match(self::documentPattern($docType), $docNumber)) {
                 $errors->add('apisunat_document', self::documentErrorLabel($docType));
+            } elseif ($docType === '6' && !self::isValidRuc($docNumber)) {
+                $errors->add('apisunat_document', __('RUC inválido', 'apisunatv2'));
             }
         }
 

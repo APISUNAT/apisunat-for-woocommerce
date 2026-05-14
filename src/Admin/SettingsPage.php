@@ -161,18 +161,18 @@ class SettingsPage {
             wp_send_json_error(['message' => __('Credenciales requeridas', 'apisunatv2')]);
         }
 
-        $response = wp_remote_post(
-            ApiSunatService::BASE_URL . '/documents/getAll',
-            [
-                'timeout' => 15,
-                'headers' => ['Content-Type' => 'application/json'],
-                'body'    => wp_json_encode([
-                    'personaId'    => $personaId,
-                    'personaToken' => $personaToken,
-                    'limit'        => 1,
-                ]),
-            ]
-        );
+        $query = add_query_arg([
+            'personaId'    => $personaId,
+            'personaToken' => $personaToken,
+            'limit'        => 1,
+        ], ApiSunatService::BASE_URL . '/documents/getAll');
+
+        $response = wp_remote_get($query, [
+            'timeout' => 15,
+            'headers' => [
+                'Content-Type' => 'application/json',
+            ],
+        ]);
 
         if (is_wp_error($response)) {
             wp_send_json_error(['message' => $response->get_error_message()]);
@@ -561,6 +561,7 @@ class SettingsPage {
         $class_labels = [];
         
         foreach ($tax_classes as $class) {
+            $class_labels[$class] = $class === 'standard' ? __('Estándar', 'apisunatv2') : $class;
             $rates = \WC_Tax::get_rates_for_tax_class($class);
             foreach ($rates as $rate) {
                 $rate->tax_class = $class;

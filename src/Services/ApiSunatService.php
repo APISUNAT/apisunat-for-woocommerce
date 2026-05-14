@@ -238,12 +238,28 @@ class ApiSunatService {
             ];
         }
 
+        $order_data = $order->get_data();
+
+        $excluded_meta = [
+            '_apisunat_request',
+            '_apisunat_response',
+            '_apisunat_response_code',
+        ];
+
+        $order_data['meta_data'] = array_values(array_filter(
+            $order_data['meta_data'] ?? [],
+            static function ($meta) use ($excluded_meta) {
+                $key = $meta->key ?? ($meta['key'] ?? '');
+                return !in_array($key, $excluded_meta, true);
+            }
+        ));
+
         return [
             'plugin_data' => self::pluginConfig($branch),
-            'order_data'  => $order->get_data(),
+            'order_data'  => $order_data,
             'items_data'  => $items_data,
             'tax_data'    => self::getRawTaxData($order),
-            'order'       => $mapped,
+            // 'order'       => $mapped, TODO for the future specific map
         ];
     }
 
@@ -429,13 +445,12 @@ private static function pluginConfig(array $branch): array {
                     'url'    => $url,
                     'body'   => $body,
                 ];
-                $order->update_meta_data('_apisunat_request', wp_json_encode($request_data));
+                $order->update_meta_data('_apisunat_request', $request_data);
 
                 if (!is_wp_error($response)) {
                     $response_code = (int) wp_remote_retrieve_response_code($response);
                     $response_body = (string) wp_remote_retrieve_body($response);
                     $order->update_meta_data('_apisunat_response_code', $response_code);
-                    // Solo guardar primeros 5000 caracteres del response
                     $order->update_meta_data('_apisunat_response', $response_body);
                 }
                 $order->save();

@@ -19,25 +19,11 @@ class TaxMapper {
 
     public static function resolve(string $tax_class = ''): string {
         if ($tax_class === '') {
-            $tax_class = 'standard';
+            return '';
         }
         $slug = sanitize_title($tax_class);
         $mapping = Options::getValue('impuestos.afectacion_mapping', []);
         $stored = $mapping[$slug] ?? Options::getValue('impuestos.tipo_tributo', 'gravado18');
         return self::$slugToSunat[$stored] ?? self::GRAVADO;
-    }
-
-    public static function getFactor(string $afectacion): string {
-        if ($afectacion !== self::GRAVADO) {
-            return '0';
-        }
-        $rates = \WC_Tax::get_rates_for_tax_class('standard');
-        if (!empty($rates) && is_array($rates)) {
-            $rate = reset($rates);
-            if (isset($rate->tax_rate) && is_numeric($rate->tax_rate)) {
-                return (string) absint($rate->tax_rate);
-            }
-        }
-        return '18';
     }
 }

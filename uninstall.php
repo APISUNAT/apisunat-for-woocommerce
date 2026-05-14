@@ -10,5 +10,53 @@ if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     }
 }
 
-delete_option('apisunatv2_settings');
-delete_option('sunat_migrated');
+$options = [
+    'apisunatv2_settings',
+    'apisunatv2_settings_api',
+    'apisunatv2_settings_emision',
+    'apisunatv2_settings_advanced',
+    'apisunatv2_settings_detraccion',
+    'apisunatv2_settings_impuestos',
+    'apisunat_tax_setup_done'
+];
+
+foreach ($options as $option) {
+    delete_option($option);
+    delete_site_option($option);
+}
+
+
+/* TODO evaluar si es necesario eliminar datos adicionales como logs, meta keys, etc.
+
+global $wpdb;
+
+$metaKeys = [
+    '_sunat_sent',
+    '_apisunat_document_status',
+    '_billing_apisunat_cpe_type',
+    '_billing_apisunat_id_type',
+    '_billing_apisunat_id_number',
+];
+
+foreach ($metaKeys as $metaKey) {
+    $wpdb->delete($wpdb->postmeta, ['meta_key' => $metaKey]);
+}
+
+if (function_exists('as_unschedule_all_actions')) {
+    as_unschedule_all_actions('', [], 'apisunatv2');
+    as_unschedule_all_actions('', [], 'apisunat-status');
+}
+
+$upload = wp_upload_dir();
+$logDir = trailingslashit($upload['basedir']) . 'apisunatv2-logs';
+
+if (is_dir($logDir)) {
+    foreach (glob($logDir . '/*.log') as $file) {
+        if (is_file($file)) {
+            wp_delete_file($file);
+        }
+    }
+
+    @rmdir($logDir);
+}
+*/
