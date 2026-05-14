@@ -242,11 +242,37 @@ class CheckoutHooks {
     public static function ajaxConsultDocument(): void {
         check_ajax_referer(self::NONCE_ACTION, 'nonce');
 
+        // Gate 1: request must originate from the checkout page
+        $referer = wp_get_referer();
+        $checkoutUrl = function_exists('wc_get_checkout_url') ? wc_get_checkout_url() : '';
+        if (!$referer || !$checkoutUrl || strpos($referer, untrailingslashit($checkoutUrl)) === false) {
+            wp_send_json_error(['message' => __('Contexto inválido', 'apisunatv2')], 403);
+        }
+
+        // Gate 2: per-IP rate limit (20 lookups / 10 minutes)
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
+        if ($ip !== '') {
+            $rlKey = 'apisunat_consult_rl_' . md5($ip);
+            $count = (int) get_transient($rlKey);
+            if ($count >= 20) {
+                wp_send_json_error(['message' => __('Demasiadas solicitudes. Intenta más tarde.', 'apisunatv2')], 429);
+            }
+            set_transient($rlKey, $count + 1, 10 * MINUTE_IN_SECONDS);
+        }
+
         $docType   = isset($_POST['doc_type'])   ? sanitize_text_field(wp_unslash($_POST['doc_type']))   : '';
         $docNumber = isset($_POST['doc_number']) ? sanitize_text_field(wp_unslash($_POST['doc_number'])) : '';
 
         if ($docType === '' || $docNumber === '') {
             wp_send_json_error(['message' => __('Parámetros inválidos', 'apisunatv2')]);
+        }
+
+        // Gate 3: tight input bounds — DNI is exactly 8 digits, RUC is exactly 11 digits
+        if (!in_array($docType, ['1', '6'], true)) {
+            wp_send_json_error(['message' => __('Tipo de documento no soportado', 'apisunatv2')]);
+        }
+        if (!ctype_digit($docNumber) || strlen($docNumber) < 8 || strlen($docNumber) > 11) {
+            wp_send_json_error(['message' => __('Número de documento inválido', 'apisunatv2')]);
         }
 
         $result = $docType === '6'
