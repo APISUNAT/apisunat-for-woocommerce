@@ -1,6 +1,7 @@
 <?php
 namespace Atm\Apisunatwp\Jobs;
 
+use Atm\Apisunatwp\Exceptions\ApiRequestException;
 use Atm\Apisunatwp\Logging\Logger;
 use Atm\Apisunatwp\Services\ApiSunatService;
 
@@ -34,8 +35,14 @@ class SendOrderJob {
                 'error'    => $e->getMessage(),
             ]);
             $order->add_order_note('API Sunat: ' . $e->getMessage());
-            $order->update_meta_data('_apisunat_document_status', 'ERROR');
-            $order->save();
+
+            $isPermanent = !($e instanceof ApiRequestException && $e->isTransient());
+            if ($isPermanent) {
+                $order->update_meta_data('_apisunat_document_status', 'ERROR');
+                $order->save();
+            }
+
+            throw $e; // Re-throw so Action Scheduler can retry transient failures
         }
     }
 }

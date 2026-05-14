@@ -31,6 +31,26 @@ class ApiSunatService {
         return self::$logger;
     }
 
+    private static function acquireLock(int $orderId): bool {
+        $key = 'apisunat_send_lock_' . $orderId;
+        // add_option is atomic at the DB level (UNIQUE constraint on option_name):
+        // returns true on first writer, false if option already exists.
+        if (add_option($key, time() + 60, '', 'no')) {
+            return true;
+        }
+        // Lock present — check if it has expired (stale lock from a crashed process).
+        $expires = (int) get_option($key, 0);
+        if ($expires > 0 && $expires < time()) {
+            update_option($key, time() + 60, false);
+            return true;
+        }
+        return false;
+    }
+
+    private static function releaseLock(int $orderId): void {
+        delete_option('apisunat_send_lock_' . $orderId);
+    }
+
     public static function send(int|string $order_id): void {
         $order_id = (int) $order_id;
         $order    = wc_get_order($order_id);
@@ -45,38 +65,55 @@ class ApiSunatService {
             return;
         }
 
-        $branch = Options::resolveBranch($order);
-        if (empty($branch['persona_id']) || empty($branch['persona_token'])) {
-            throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
+        if (!self::acquireLock($order_id)) {
+            self::logger()->info('Send already in progress, skipping concurrent call', ['order_id' => $order_id]);
+            return;
         }
 
-        if (!self::hasRequiredDocument($order)) {
-            $order->add_order_note(__('API Sunat: Documento del cliente requerido. Completa los campos en el panel lateral del pedido.', 'apisunatv2'));
-            self::logger()->error('Missing customer document', ['order_id' => $order_id]);
-            throw new \RuntimeException(__('Documento del cliente requerido. Completa el panel "API Sunat" en el pedido.', 'apisunatv2'));
-        }
+        try {
+            // Re-check status AFTER acquiring the lock — another process may have
+            // just finished while we were waiting.
+            $order = wc_get_order($order_id);
+            if (self::isAlreadyProcessed($order)) {
+                self::logger()->debug('Order processed by concurrent send, skipping', ['order_id' => $order_id]);
+                return;
+            }
 
-        $payload  = self::buildPayload($order, $branch);
+            $branch = Options::resolveBranch($order);
+            if (empty($branch['persona_id']) || empty($branch['persona_token'])) {
+                throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
+            }
 
-        if (Options::getValue('advanced.debug')) {
-            self::logger()->debug('CPE Payload', ['order_id' => $order_id, 'payload' => $payload]);
-        }
+            if (!self::hasRequiredDocument($order)) {
+                $order->add_order_note(__('API Sunat: Documento del cliente requerido. Completa los campos en el panel lateral del pedido.', 'apisunatv2'));
+                self::logger()->error('Missing customer document', ['order_id' => $order_id]);
+                throw new \RuntimeException(__('Documento del cliente requerido. Completa el panel "API Sunat" en el pedido.', 'apisunatv2'));
+            }
 
-        $response = self::request('POST', self::API_URL, $payload);
+            $payload  = self::buildPayload($order, $branch);
 
-        if (Options::getValue('advanced.debug')) {
-            self::logger()->debug('CPE Response', ['order_id' => $order_id, 'response' => $response]);
-        }
+            if (Options::getValue('advanced.debug')) {
+                self::logger()->debug('CPE Payload', ['order_id' => $order_id, 'payload' => $payload]);
+            }
 
-        self::processResponse($order, $response);
+            $response = self::request('POST', self::API_URL, $payload);
 
-        // Programar verificación asíncrona del estado
-        if (function_exists('as_enqueue_async_action')) {
-            as_enqueue_async_action(
-                'apisunat_check_status_async',
-                ['order_id' => $order_id, 'attempt' => 0],
-                'apisunat-status'
-            );
+            if (Options::getValue('advanced.debug')) {
+                self::logger()->debug('CPE Response', ['order_id' => $order_id, 'response' => $response]);
+            }
+
+            self::processResponse($order, $response);
+
+            // Programar verificación asíncrona del estado
+            if (function_exists('as_enqueue_async_action')) {
+                as_enqueue_async_action(
+                    'apisunat_check_status_async',
+                    ['order_id' => $order_id, 'attempt' => 0],
+                    'apisunat-status'
+                );
+            }
+        } finally {
+            self::releaseLock($order_id);
         }
     }
 
