@@ -109,9 +109,9 @@ class CheckoutHooks {
         }
 
         $mapping = [
-            '_wc_other/apisunat/sunat_cpe_type'  => '_sunat_cpe_type',
-            '_wc_other/apisunat/sunat_id_type'   => '_sunat_id_type',
-            '_wc_other/apisunat/sunat_id_number' => '_sunat_id_number',
+            '_wc_other/apisunat/sunat_cpe_type'  => '_billing_apisunat_cpe_type',
+            '_wc_other/apisunat/sunat_id_type'   => '_billing_apisunat_id_type',
+            '_wc_other/apisunat/sunat_id_number' => '_billing_apisunat_id_number',
         ];
 
         $updated = false;
@@ -126,9 +126,9 @@ class CheckoutHooks {
             $order->save();
         }
 
-        if ($order->get_meta('_sunat_cpe_type', true)
-            && $order->get_meta('_sunat_id_type', true)
-            && $order->get_meta('_sunat_id_number', true)) {
+        if ($order->get_meta('_billing_apisunat_cpe_type', true)
+            && $order->get_meta('_billing_apisunat_id_type', true)
+            && $order->get_meta('_billing_apisunat_id_number', true)) {
             try {
                 \Atm\Apisunatwp\Services\ApiSunatService::send($order_id);
             } catch (\Throwable $e) {
@@ -151,31 +151,31 @@ class CheckoutHooks {
     }
 
     public static function renderClassicFields(): void {
-        $cpeType  = (string) (WC()->checkout->get_value('_sunat_cpe_type') ?: '03');
-        $idType   = (string) (WC()->checkout->get_value('_sunat_id_type') ?: '1');
-        $idNumber = (string) WC()->checkout->get_value('_sunat_id_number');
+        $cpeType  = (string) (WC()->checkout->get_value('_billing_apisunat_cpe_type') ?: '03');
+        $idType   = (string) (WC()->checkout->get_value('_billing_apisunat_id_type') ?: '1');
+        $idNumber = (string) WC()->checkout->get_value('_billing_apisunat_id_number');
         ?>
         <div class="sunat-checkout-fields">
             <h3><?= esc_html__('Datos para facturación', 'apisunatv2') ?></h3>
-            <p class="form-row form-row-wide" id="_sunat_cpe_type_field">
-                <label for="_sunat_cpe_type"><?= esc_html__('Comprobante', 'apisunatv2') ?>&nbsp;<abbr class="required" title="required">*</abbr></label>
-                <select name="_sunat_cpe_type" id="_sunat_cpe_type" class="select" required>
+            <p class="form-row form-row-wide" id="_billing_apisunat_cpe_type_field">
+                <label for="_billing_apisunat_cpe_type"><?= esc_html__('Comprobante', 'apisunatv2') ?>&nbsp;<abbr class="required" title="required">*</abbr></label>
+                <select name="_billing_apisunat_cpe_type" id="_billing_apisunat_cpe_type" class="select" required>
                     <option value="03" <?= selected($cpeType, '03', false) ?>><?= esc_html__('Boleta de Venta', 'apisunatv2') ?></option>
                     <option value="01" <?= selected($cpeType, '01', false) ?>><?= esc_html__('Factura', 'apisunatv2') ?></option>
                 </select>
             </p>
-            <p class="form-row form-row-wide" id="_sunat_id_type_field">
-                <label for="_sunat_id_type"><?= esc_html__('Tipo de documento', 'apisunatv2') ?>&nbsp;<abbr class="required" title="required">*</abbr></label>
-                <select name="_sunat_id_type" id="_sunat_id_type" class="select" required>
+            <p class="form-row form-row-wide" id="_billing_apisunat_id_type_field">
+                <label for="_billing_apisunat_id_type"><?= esc_html__('Tipo de documento', 'apisunatv2') ?>&nbsp;<abbr class="required" title="required">*</abbr></label>
+                <select name="_billing_apisunat_id_type" id="_billing_apisunat_id_type" class="select" required>
                     <option value="1" <?= selected($idType, '1', false) ?>><?= esc_html__('DNI', 'apisunatv2') ?></option>
                     <option value="6" <?= selected($idType, '6', false) ?>><?= esc_html__('RUC', 'apisunatv2') ?></option>
                     <option value="7" <?= selected($idType, '7', false) ?>><?= esc_html__('Pasaporte', 'apisunatv2') ?></option>
                     <option value="B" <?= selected($idType, 'B', false) ?>><?= esc_html__('Otro (extranjero)', 'apisunatv2') ?></option>
                 </select>
             </p>
-            <p class="form-row form-row-wide" id="_sunat_id_number_field">
-                <label for="_sunat_id_number"><?= esc_html__('Número de documento', 'apisunatv2') ?>&nbsp;<abbr class="required" title="required">*</abbr></label>
-                <input type="text" name="_sunat_id_number" id="_sunat_id_number" class="input-text" value="<?= esc_attr($idNumber) ?>" placeholder="<?= esc_attr__('DNI o RUC', 'apisunatv2') ?>" required autocomplete="off">
+            <p class="form-row form-row-wide" id="_billing_apisunat_id_number_field">
+                <label for="_billing_apisunat_id_number"><?= esc_html__('Número de documento', 'apisunatv2') ?>&nbsp;<abbr class="required" title="required">*</abbr></label>
+                <input type="text" name="_billing_apisunat_id_number" id="_billing_apisunat_id_number" class="input-text" value="<?= esc_attr($idNumber) ?>" placeholder="<?= esc_attr__('DNI o RUC', 'apisunatv2') ?>" required autocomplete="off">
             </p>
         </div>
         <?php
@@ -198,9 +198,9 @@ class CheckoutHooks {
     }
 
     public static function validate($data, $errors): void {
-        $docType   = isset($_POST['_sunat_id_type'])   ? sanitize_text_field(wp_unslash($_POST['_sunat_id_type']))   : '';
-        $docNumber = isset($_POST['_sunat_id_number']) ? sanitize_text_field(wp_unslash($_POST['_sunat_id_number'])) : '';
-        $cpeType   = isset($_POST['_sunat_cpe_type'])  ? sanitize_text_field(wp_unslash($_POST['_sunat_cpe_type']))  : '';
+        $docType   = isset($_POST['_billing_apisunat_id_type'])   ? sanitize_text_field(wp_unslash($_POST['_billing_apisunat_id_type']))   : '';
+        $docNumber = isset($_POST['_billing_apisunat_id_number']) ? sanitize_text_field(wp_unslash($_POST['_billing_apisunat_id_number'])) : '';
+        $cpeType   = isset($_POST['_billing_apisunat_cpe_type'])  ? sanitize_text_field(wp_unslash($_POST['_billing_apisunat_cpe_type']))  : '';
 
         if ($docType !== '' && $docNumber !== '') {
             if (!preg_match(self::documentPattern($docType), $docNumber)) {
@@ -231,7 +231,7 @@ class CheckoutHooks {
     }
 
     public static function save($order, $data): void {
-        $fields = ['_sunat_cpe_type', '_sunat_id_type', '_sunat_id_number'];
+        $fields = ['_billing_apisunat_cpe_type', '_billing_apisunat_id_type', '_billing_apisunat_id_number'];
         foreach ($fields as $field) {
             if (isset($_POST[$field]) && $_POST[$field] !== '') {
                 $order->update_meta_data($field, sanitize_text_field(wp_unslash($_POST[$field])));

@@ -46,7 +46,6 @@ class Activator {
         $classes = [
             'Exonerado' => 'Exonerado (0%)',
             'Inafecto'  => 'Inafecto (0%)',
-            'Gratuito'  => 'Gratuito (0%)',
         ];
 
         $table = $wpdb->prefix . 'wc_tax_rate_classes';

@@ -1,6 +1,7 @@
 <?php
 namespace Atm\Apisunatwp\Admin;
 
+use Atm\Apisunatwp\Config\Catalogs;
 use Atm\Apisunatwp\Config\Options;
 use Atm\Apisunatwp\Services\ApiSunatService;
 
@@ -98,17 +99,31 @@ class SettingsPage {
 
             $output['emision']['include_time']  = !empty($emision['include_time']);
             $output['emision']['shipping_cost'] = !empty($emision['shipping_cost']);
+            $output['emision']['boleta_sin_info_cliente'] = !empty($emision['boleta_sin_info_cliente']);
         }
 
-        if (isset($input['documento_cliente']) && is_array($input['documento_cliente'])) {
-            $output['documento_cliente']['require_for_factura'] = !empty($input['documento_cliente']['require_for_factura']);
-            $output['documento_cliente']['require_for_boleta']  = !empty($input['documento_cliente']['require_for_boleta']);
-            $output['documento_cliente']['no_doc']              = !empty($input['documento_cliente']['no_doc']);
+        if (isset($input['impuestos']) && is_array($input['impuestos'])) {
+            $allowed = ['gravado10', 'gravado105', 'gravado18', 'exonerado', 'inafecto'];
+            $output['impuestos']['tipo_tributo'] = in_array(($input['impuestos']['tipo_tributo'] ?? 'gravado18'), $allowed, true)
+                ? $input['impuestos']['tipo_tributo'] : 'gravado18';
+            if (isset($input['impuestos']['afectacion_mapping']) && is_array($input['impuestos']['afectacion_mapping'])) {
+                $allowedMap = ['gravado10', 'gravado105', 'gravado18', 'exonerado', 'inafecto'];
+                foreach ($input['impuestos']['afectacion_mapping'] as $class => $afectacion) {
+                    $slug = sanitize_title($class);
+                    if (in_array($afectacion, $allowedMap, true)) {
+                        $output['impuestos']['afectacion_mapping'][$slug] = $afectacion;
+                    }
+                }
+            }
         }
 
         if (isset($input['detraccion']) && is_array($input['detraccion'])) {
             $output['detraccion']['enabled']            = !empty($input['detraccion']['enabled']);
-            $output['detraccion']['default_percentage'] = max(0, min(100, absint($input['detraccion']['default_percentage'] ?? 12)));
+            $output['detraccion']['tipo_de_detraccion'] = sanitize_text_field((string) ($input['detraccion']['tipo_de_detraccion'] ?? ''));
+            $output['detraccion']['porcentaje'] = max(0, min(100, absint($input['detraccion']['porcentaje'] ?? 12)));
+            $output['detraccion']['medio_de_pago'] = sanitize_text_field((string) ($input['detraccion']['medio_de_pago'] ?? '001'));
+            $output['detraccion']['cuenta_bancaria'] = sanitize_text_field((string) ($input['detraccion']['cuenta_bancaria'] ?? ''));
+            $output['detraccion']['tipo_de_cambio'] = sanitize_text_field((string) ($input['detraccion']['tipo_de_cambio'] ?? ''));
         }
 
         if (isset($input['advanced']) && is_array($input['advanced'])) {
@@ -117,7 +132,7 @@ class SettingsPage {
 
             if (isset($input['advanced']['checkout_mapping']) && is_array($input['advanced']['checkout_mapping'])) {
                 $mapping = $input['advanced']['checkout_mapping'];
-                foreach (['tipo_comprobante', 'tipo_documento', 'numero_documento'] as $k) {
+                foreach (['tipo_comprobante', 'tipo_documento', 'numero_documento', 'cpe_factura', 'cpe_boleta', 'doc_dni', 'doc_ruc', 'doc_pasaporte', 'doc_otros'] as $k) {
                     $output['advanced']['checkout_mapping'][$k] = sanitize_text_field((string) ($mapping[$k] ?? ($output['advanced']['checkout_mapping'][$k] ?? '')));
                 }
             }
@@ -302,7 +317,6 @@ class SettingsPage {
             'gravado105' => 'Gravado105',
             'exonerado'    => 'Exonerado',
             'inafecto'     => 'Inafecto',
-            'gratuito'     => 'Gratuito',
         ];
 
         $existing = \WC_Tax::get_tax_classes();
@@ -433,7 +447,6 @@ class SettingsPage {
             'api'        => ['label' => __('API', 'apisunatv2'),        'section' => 'apisunat_api'],
             'emision'    => ['label' => __('Emisión', 'apisunatv2'),    'section' => 'apisunat_emision'],
             'impuestos'  => ['label' => __('Impuestos', 'apisunatv2'),  'section' => 'apisunat_impuestos'],
-            'documento'  => ['label' => __('Documento', 'apisunatv2'),  'section' => 'apisunat_documento'],
             'detraccion' => ['label' => __('Detracción', 'apisunatv2'), 'section' => 'apisunat_detraccion'],
             'avanzado'   => ['label' => __('Avanzado', 'apisunatv2'),   'section' => 'apisunat_avanzado'],
         ];
@@ -452,6 +465,8 @@ class SettingsPage {
             'select'      => self::renderSelect($name, $id, $value, $field),
             'branches'    => self::renderBranches($name, $id, is_array($value) ? $value : []),
             'tax_manager' => self::renderTaxManager(),
+            'tipo_detraccion_select' => self::renderTipoDetraccionSelect($name, $id, (string) $value),
+            'checkout_mapping'       => self::renderCheckoutMapping(),
             default       => self::renderTextInput($name, $id, (string) $value, $field),
         };
     }
@@ -528,6 +543,9 @@ class SettingsPage {
     }
 
     private static function renderTaxManager(): void {
+        if (!function_exists('wc_tax_enabled') || !wc_tax_enabled()) {
+            return;
+        }
         if (!class_exists('WC_Tax')) {
             echo '<p class="notice notice-error">' . esc_html__('WooCommerce no disponible.', 'apisunatv2') . '</p>';
             return;
@@ -536,15 +554,53 @@ class SettingsPage {
         $nonce = wp_create_nonce(self::NONCE_ACTION);
         $tax_classes = array_merge(['standard'], \WC_Tax::get_tax_classes());
         $all_rates = [];
+        $class_labels = [];
         
         foreach ($tax_classes as $class) {
             $rates = \WC_Tax::get_rates_for_tax_class($class);
             foreach ($rates as $rate) {
                 $rate->tax_class = $class;
                 $all_rates[] = $rate;
+                $class_labels[$class] = $class === 'standard' ? __('Estándar', 'apisunatv2') : $class;
             }
         }
+
+        $afectacionMapping = Options::getValue('impuestos.afectacion_mapping', []);
+        $afectacionOptions = [
+            'gravado10' => __('Gravado 10%', 'apisunatv2'),
+            'gravado105' => __('Gravado 10.5%', 'apisunatv2'),
+            'gravado18' => __('Gravado 18%', 'apisunatv2'),
+            'exonerado' => __('Exonerado', 'apisunatv2'),
+            'inafecto' => __('Inafecto', 'apisunatv2'),
+        ];
         ?>
+        <h3><?= esc_html__('Mapeo de clases', 'apisunatv2') ?></h3>
+        <table class="wp-list-table widefat fixed striped" style="margin-bottom:20px">
+            <thead>
+                <tr>
+                    <th><?= esc_html__('Clase WooCommerce', 'apisunatv2') ?></th>
+                    <th><?= esc_html__('Afectación SUNAT', 'apisunatv2') ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($class_labels as $class => $label):
+                    $slug = sanitize_title($class);
+                    $current = $afectacionMapping[$slug] ?? '10';
+                ?>
+                    <tr>
+                        <td><?= esc_html($label) ?></td>
+                        <td>
+                            <select name="<?= esc_attr(Options::OPTION_KEY) ?>[impuestos][afectacion_mapping][<?= esc_attr($slug) ?>]">
+                                <?php foreach ($afectacionOptions as $val => $optLabel): ?>
+                                    <option value="<?= esc_attr($val) ?>" <?= selected($current, $val, false) ?>><?= esc_html($optLabel) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+
         <h3><?= esc_html__('Tasas existentes', 'apisunatv2') ?></h3>
         <?php if (empty($all_rates)): ?>
             <p><?= esc_html__('No hay tasas configuradas.', 'apisunatv2') ?></p>
@@ -574,51 +630,6 @@ class SettingsPage {
                 </tbody>
             </table>
         <?php endif; ?>
-        
-        <h3 style="margin-top: 20px;"><?= esc_html__('Agregar nueva tasa', 'apisunatv2') ?></h3>
-        
-        <p class="description" style="margin-bottom: 15px;">
-            <?= esc_html__('Crea impuestos para IGV (10%, 10.5%, 18%), Exonerado e Inafecto (0%), o combinaciones como IGV + ISC (impuesto compuesto).', 'apisunatv2') ?>
-        </p>
-        
-        <table class="form-table">
-            <tr>
-                <th><label for="new_tax_rate"><?= esc_html__('Tasa (%)', 'apisunatv2') ?></label></th>
-                <td><input type="number" step="0.01" min="0" max="100" id="new_tax_rate" value="18" class="small-text"></td>
-            </tr>
-            <tr>
-                <th><label for="new_tax_name"><?= esc_html__('Nombre', 'apisunatv2') ?></label></th>
-                <td><input type="text" id="new_tax_name" placeholder="<?= esc_attr__('Ej: IGV 18%, ISC 2%', 'apisunatv2') ?>" class="regular-text"></td>
-            </tr>
-            <tr>
-                <th><label for="new_tax_class"><?= esc_html__('Clase', 'apisunatv2') ?></label></th>
-                <td>
-                    <select id="new_tax_class">
-                        <?php foreach ($tax_classes as $class): ?>
-                            <option value="<?= esc_attr($class) ?>">
-                                <?= esc_html($class === 'standard' ? __('Estándar (Gravado)', 'apisunatv2') : $class) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </td>
-            </tr>
-            <tr>
-                <th><label for="new_tax_compound"><?= esc_html__('Impuesto compuesto', 'apisunatv2') ?></label></th>
-                <td>
-                    <input type="checkbox" id="new_tax_compound" value="1">
-                    <span class="description"><?= esc_html__('Marcar si este impuesto se aplica después de otros (ej. ISC después de IGV)', 'apisunatv2') ?></span>
-                </td>
-            </tr>
-            <tr>
-                <th></th>
-                <td>
-                    <button type="button" class="button button-primary" id="add-tax-rate-btn">
-                        <?= esc_html__('Agregar Tasa', 'apisunatv2') ?>
-                    </button>
-                    <span id="tax-add-result" role="status" aria-live="polite"></span>
-                </td>
-            </tr>
-        </table>
         
         <h3 style="margin-top: 30px;"><?= esc_html__('Configuraciones rápidas', 'apisunatv2') ?></h3>
         <p class="description" style="margin-bottom: 15px;">
@@ -761,6 +772,100 @@ class SettingsPage {
         echo '</select>';
     }
 
+    private static function renderTipoDetraccionSelect(string $name, string $id, string $value): void {
+        $tipos = Catalogs::tiposDeDetraccion();
+        echo "<select id='" . esc_attr($id) . "' name='" . esc_attr($name) . "'>";
+        foreach ($tipos as $k => $v) {
+            $selected = ($value === (string) $k) ? ' selected' : '';
+            printf(
+                '<option value="%s"%s data-percent="%s">%s</option>',
+                esc_attr((string) $k),
+                $selected,
+                esc_attr($v['percent'] !== null ? (string) $v['percent'] : ''),
+                esc_html($v['label'])
+            );
+        }
+        echo '</select>';
+        $pctId = self::fieldId('detraccion.porcentaje');
+        ?>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var tipo = document.getElementById('<?= esc_js($id) ?>');
+            var pct  = document.getElementById('<?= esc_js($pctId) ?>');
+            if (tipo && pct) {
+                var setPct = function() {
+                    var opt = tipo.options[tipo.selectedIndex];
+                    if (opt && opt.dataset.percent) {
+                        pct.value = opt.dataset.percent;
+                    }
+                };
+                tipo.addEventListener('change', setPct);
+                setPct();
+            }
+        });
+        </script>
+        <?php
+    }
+
+    private static function renderCheckoutMapping(): void {
+        $custom     = (bool) Options::getValue('advanced.custom_checkout', false);
+        $mapping    = Options::getValue('advanced.checkout_mapping', []);
+        $prefix     = Options::OPTION_KEY . '[advanced][checkout_mapping]';
+        ?>
+        <div id="checkout-mapping-fields" style="<?= $custom ? '' : 'display:none' ?>">
+            <table class="form-table" style="margin:0">
+                <tr>
+                    <th style="width:180px"><?= esc_html__('Key Tipo CPE', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[tipo_comprobante]" value="<?= esc_attr($mapping['tipo_comprobante'] ?? '') ?>" placeholder="_billing_apisunat_document_type" class="regular-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor FACTURA', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[cpe_factura]" value="<?= esc_attr($mapping['cpe_factura'] ?? '01') ?>" placeholder="01" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor BOLETA', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[cpe_boleta]" value="<?= esc_attr($mapping['cpe_boleta'] ?? '03') ?>" placeholder="03" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Key Tipo Doc.', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[tipo_documento]" value="<?= esc_attr($mapping['tipo_documento'] ?? '') ?>" placeholder="_billing_apisunat_customer_id_type" class="regular-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor DNI', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_dni]" value="<?= esc_attr($mapping['doc_dni'] ?? '1') ?>" placeholder="1" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor RUC', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_ruc]" value="<?= esc_attr($mapping['doc_ruc'] ?? '6') ?>" placeholder="6" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor PASAPORTE', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_pasaporte]" value="<?= esc_attr($mapping['doc_pasaporte'] ?? '7') ?>" placeholder="7" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor OTROS', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_otros]" value="<?= esc_attr($mapping['doc_otros'] ?? 'B') ?>" placeholder="B" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Key N° Doc.', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[numero_documento]" value="<?= esc_attr($mapping['numero_documento'] ?? '') ?>" placeholder="_billing_apisunat_customer_id" class="regular-text"></td>
+                </tr>
+            </table>
+        </div>
+        <script>
+        (function() {
+            var cb = document.getElementById('apisunatv2-advanced-custom_checkout');
+            var group = document.getElementById('checkout-mapping-fields');
+            if (cb && group) {
+                cb.addEventListener('change', function() {
+                    group.style.display = this.checked ? '' : 'none';
+                });
+            }
+        })();
+        </script>
+        <?php
+    }
+
     private static function schema(): array {
         return [
             [
@@ -782,9 +887,6 @@ class SettingsPage {
             [
                 'id'    => 'apisunat_emision',
                 'title' => __('Emisión', 'apisunatv2'),
-                'desc'  => function (): void {
-                    echo '<p class="description">' . esc_html__('Series globales. Si hay sucursales definidas, las series por sucursal (sección API) tienen prioridad.', 'apisunatv2') . '</p>';
-                },
                 'fields' => [
                     [
                         'key'     => 'emision.modo',
@@ -801,13 +903,11 @@ class SettingsPage {
                             'wc-completed'  => __('Completado', 'apisunatv2'),
                             'wc-processing' => __('Procesando', 'apisunatv2'),
                             'wc-on-hold'    => __('En espera', 'apisunatv2'),
+                            'wc-pending'    => __('Pendiente', 'apisunatv2'),
                         ],
                         'default' => 'wc-completed',
                     ],
-                    ['key' => 'emision.series.factura',              'label' => __('Serie Factura', 'apisunatv2'),    'type' => 'text', 'default' => 'F001'],
-                    ['key' => 'emision.series.boleta',               'label' => __('Serie Boleta', 'apisunatv2'),     'type' => 'text', 'default' => 'B001'],
-                    ['key' => 'emision.series.nota_credito_factura', 'label' => __('Serie NC Factura', 'apisunatv2'), 'type' => 'text', 'default' => 'FC01'],
-                    ['key' => 'emision.series.nota_credito_boleta',  'label' => __('Serie NC Boleta', 'apisunatv2'),  'type' => 'text', 'default' => 'BC01'],
+                    ['key' => 'emision.boleta_sin_info_cliente', 'label' => __('Si no hay información del cliente crear una boleta simple', 'apisunatv2'), 'type' => 'checkbox'],
                 ],
             ],
             [
@@ -815,12 +915,12 @@ class SettingsPage {
                 'title' => __('Impuestos', 'apisunatv2'),
                 'desc'  => function (): void {
                     echo '<p class="description">';
-                    echo esc_html__('La afectación SUNAT se determina automáticamente por la clase de impuesto asignada al producto en WooCommerce.', 'apisunatv2');
+                    echo esc_html__('La afectación SUNAT se determina por la clase de impuesto asignada al producto en WooCommerce.', 'apisunatv2');
                     echo '</p>';
 
                     if (!function_exists('wc_tax_enabled') || !wc_tax_enabled()) {
-                        echo '<p class="notice notice-error" style="padding:8px;display:flex;align-items:center;gap:8px;">';
-                        echo esc_html__('Los impuestos están desactivados en WooCommerce. Es obligatorio para la integración.', 'apisunatv2');
+                        echo '<p class="notice" style="padding:8px;display:flex;align-items:center;gap:8px;">';
+                        echo esc_html__('Los impuestos están desactivados en WooCommerce, por lo que únicamente se tomará en cuenta el tipo de tributo por defecto.', 'apisunatv2');
                         echo ' <button type="button" id="apisunat-enable-tax" class="button button-primary">' . esc_html__('Activar impuestos', 'apisunatv2') . '</button>';
                         echo ' <span id="apisunat-enable-tax-result" role="status" aria-live="polite"></span>';
                         echo '</p>';
@@ -829,64 +929,35 @@ class SettingsPage {
 
                     if (!class_exists('WC_Tax')) {
                         echo '<p class="notice notice-error" style="padding:8px;">';
-                        echo esc_html__('WooCommerce no está activo. Es obligatorio para la integración.', 'apisunatv2');
+                        echo esc_html__('WooCommerce no está activo.', 'apisunatv2');
                         echo '</p>';
                         return;
                     }
-
-                    global $wpdb;
-                    $table = $wpdb->prefix . 'wc_tax_rate_classes';
-                    $existing = $wpdb->get_col("SELECT slug FROM {$table}");
-
-                    $check = ['gravado10' => 'Gravado 10%', 'gravado105' => 'Gravado 10.5%', 'exonerado' => 'Exonerado', 'inafecto' => 'Inafecto', 'gratuito' => 'Gratuito'];
-                    $missing = [];
-                    foreach ($check as $slug => $label) {
-                        if (!in_array($slug, $existing, true)) {
-                            $missing[] = $label;
-                        }
-                    }
-                    if (!empty($missing)) {
-                        echo '<p class="notice notice-warning" style="padding:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
-                        echo esc_html(sprintf(__('Faltan clases de impuestos: %s. Son necesarias para la integración.', 'apisunatv2'), implode(', ', $missing)));
-                        echo ' <button type="button" id="apisunat-create-classes" class="button button-primary">' . esc_html__('Crear clases de impuestos', 'apisunatv2') . '</button>';
-                        echo ' <span id="apisunat-classes-result" role="status" aria-live="polite"></span>';
-                        echo '</p>';
-                    } else {
-                        echo '<p class="notice notice-success" style="padding:8px;">';
-                        echo esc_html__('Clases de impuestos configuradas: Exonerado, Inafecto, Gratuito', 'apisunatv2');
-                        echo '</p>';
-                    }
                 },
                 'fields' => [
+                    ['key' => 'impuestos.tipo_tributo', 'label' => __('Tipo de tributo por defecto', 'apisunatv2'), 'type' => 'select', 'options' => ['gravado10' => __('Gravado 10%', 'apisunatv2'), 'gravado105' => __('Gravado 10.5%', 'apisunatv2'), 'gravado18' => __('Gravado 18%', 'apisunatv2'), 'exonerado' => __('Exonerado', 'apisunatv2'), 'inafecto' => __('Inafecto', 'apisunatv2')], 'default' => 'gravado18'],
                     ['key' => 'tax_manager', 'label' => __('Gestor de Impuestos', 'apisunatv2'), 'type' => 'tax_manager'],
-                ],
-            ],
-            [
-                'id'    => 'apisunat_documento',
-                'title' => __('Documento del cliente', 'apisunatv2'),
-                'fields' => [
-                    ['key' => 'documento_cliente.require_for_factura', 'label' => __('Requerir para factura', 'apisunatv2'),  'type' => 'checkbox', 'default' => true],
-                    ['key' => 'documento_cliente.require_for_boleta',  'label' => __('Requerir para boleta', 'apisunatv2'),   'type' => 'checkbox'],
-                    ['key' => 'documento_cliente.no_doc',              'label' => __('Permitir sin documento', 'apisunatv2'), 'type' => 'checkbox'],
                 ],
             ],
             [
                 'id'    => 'apisunat_detraccion',
                 'title' => __('Detracción', 'apisunatv2'),
                 'fields' => [
-                    ['key' => 'detraccion.enabled',            'label' => __('Activar', 'apisunatv2'),      'type' => 'checkbox'],
-                    ['key' => 'detraccion.default_percentage', 'label' => __('Porcentaje %', 'apisunatv2'), 'type' => 'number', 'default' => 12, 'min' => 0, 'max' => 100],
+                    ['key' => 'detraccion.enabled',           'label' => __('Aplicar automáticamente', 'apisunatv2'), 'type' => 'checkbox'],
+                    ['key' => 'detraccion.tipo_de_detraccion',      'label' => __('Tipo de detracción', 'apisunatv2'),          'type' => 'tipo_detraccion_select', 'options' => Catalogs::tipoDeDetraccionOptions()],
+                    ['key' => 'detraccion.porcentaje',    'label' => __('Porcentaje %', 'apisunatv2'),             'type' => 'number', 'default' => 12, 'min' => 0, 'max' => 100],
+                    ['key' => 'detraccion.medio_de_pago',      'label' => __('Medio de pago', 'apisunatv2'),          'type' => 'select', 'options' => Catalogs::mediosDePago()],
+                    ['key' => 'detraccion.cuenta_bancaria',   'label' => __('Cuenta Bancaria', 'apisunatv2'),        'type' => 'text', 'placeholder' => '00-000-000000'],
+                    ['key' => 'detraccion.tipo_de_cambio',   'label' => __('Tipo de cambio', 'apisunatv2'), 'type' => 'text', 'placeholder' => 'USD=3.5,EUR=4.0,COP=0.7'],
                 ],
             ],
             [
                 'id'    => 'apisunat_avanzado',
                 'title' => __('Avanzado', 'apisunatv2'),
                 'fields' => [
-                    ['key' => 'advanced.debug',           'label' => __('Debug', 'apisunatv2'),                'type' => 'checkbox'],
-                    ['key' => 'advanced.custom_checkout', 'label' => __('Checkout personalizado', 'apisunatv2'), 'type' => 'checkbox'],
-                    ['key' => 'advanced.checkout_mapping.tipo_comprobante', 'label' => __('Key Tipo CPE', 'apisunatv2'), 'type' => 'text', 'placeholder' => '_billing_apisunat_document_type'],
-                    ['key' => 'advanced.checkout_mapping.tipo_documento',   'label' => __('Key Tipo Doc.', 'apisunatv2'),  'type' => 'text', 'placeholder' => '_billing_apisunat_customer_id_type'],
-                    ['key' => 'advanced.checkout_mapping.numero_documento', 'label' => __('Key N° Doc.', 'apisunatv2'),   'type' => 'text', 'placeholder' => '_billing_apisunat_customer_id'],
+                    ['key' => 'advanced.debug',            'label' => __('Debug', 'apisunatv2'),                  'type' => 'checkbox'],
+                    ['key' => 'advanced.custom_checkout',  'label' => __('Checkout personalizado', 'apisunatv2'),  'type' => 'checkbox'],
+                    ['key' => 'advanced.checkout_mapping', 'label' => '',                                          'type' => 'checkout_mapping'],
                 ],
             ],
         ];

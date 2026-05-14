@@ -5,6 +5,7 @@ class ItemsMapper {
 
     public static function map(\WC_Order $order): array {
         $items = [];
+        $orderTotal = (float) $order->get_total();
 
         foreach ($order->get_items() as $item) {
             if (!$item instanceof \WC_Order_Item_Product) {
@@ -25,7 +26,6 @@ class ItemsMapper {
                 'tax'        => round($taxAmount, 2),
                 'afectacion' => TaxMapper::resolve($tax_class),
                 'sku'        => $product?->get_sku() ?: '',
-                'detraccion' => DetraccionMapper::resolve($product, $item),
             ];
         }
 
@@ -39,7 +39,6 @@ class ItemsMapper {
                 'tax'        => round((float) $order->get_shipping_tax(), 2),
                 'afectacion' => TaxMapper::resolve(''),
                 'sku'        => 'SHIPPING',
-                'detraccion' => null,
             ];
         }
 

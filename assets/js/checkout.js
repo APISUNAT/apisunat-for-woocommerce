@@ -33,9 +33,9 @@
 
     function setupClassicCheckout() {
         $(function () {
-            var docType = $('#_sunat_id_type');
-            var docNumber = $('#_sunat_id_number');
-            var cpeType = $('#_sunat_cpe_type');
+            var docType = $('#_billing_apisunat_id_type');
+            var docNumber = $('#_billing_apisunat_id_number');
+            var cpeType = $('#_billing_apisunat_cpe_type');
             var company = $('#billing_company_field');
             var firstName = $('#billing_first_name');
             var lastName = $('#billing_last_name');

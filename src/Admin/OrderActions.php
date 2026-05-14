@@ -42,6 +42,23 @@ class OrderActions {
             wp_send_json_error(['message' => __('Order ID requerido', 'apisunatv2')]);
         }
 
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            wp_send_json_error(['message' => __('Orden no encontrada', 'apisunatv2')]);
+        }
+
+        $order->update_meta_data('_billing_apisunat_detraccion_enabled', isset($_POST['_billing_apisunat_detraccion_enabled']) ? '1' : '0');
+        if (isset($_POST['_billing_apisunat_detraccion_tipo'])) {
+            $order->update_meta_data('_billing_apisunat_detraccion_tipo', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraccion_tipo'])));
+        }
+        if (isset($_POST['_billing_apisunat_detraccion_medio_de_pago'])) {
+            $order->update_meta_data('_billing_apisunat_detraccion_medio_de_pago', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraccion_medio_de_pago'])));
+        }
+        if (isset($_POST['_billing_apisunat_detraccion_porcentaje'])) {
+            $order->update_meta_data('_billing_apisunat_detraccion_porcentaje', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraccion_porcentaje'])));
+        }
+        $order->save();
+
         try {
             ApiSunatService::send($order_id);
             wp_send_json_success(['message' => __('CPE emitido correctamente', 'apisunatv2')]);

@@ -57,7 +57,17 @@ class ApiSunatService {
         }
 
         $payload  = self::buildPayload($order, $branch);
+
+        if (Options::getValue('advanced.debug')) {
+            self::logger()->debug('CPE Payload', ['order_id' => $order_id, 'payload' => $payload]);
+        }
+
         $response = self::request('POST', self::API_URL, $payload);
+
+        if (Options::getValue('advanced.debug')) {
+            self::logger()->debug('CPE Response', ['order_id' => $order_id, 'response' => $response]);
+        }
+
         self::processResponse($order, $response);
 
         // Programar verificación asíncrona del estado
@@ -99,7 +109,15 @@ class ApiSunatService {
             'customer_email' => $order->get_billing_email(),
         ];
 
+        if (Options::getValue('advanced.debug')) {
+            self::logger()->debug('Void Payload', ['order_id' => $order_id, 'doc_id' => $docId, 'payload' => $payload]);
+        }
+
         $response = self::request('POST', self::API_URL . '/' . rawurlencode($docId), $payload);
+
+        if (Options::getValue('advanced.debug')) {
+            self::logger()->debug('Void Response', ['order_id' => $order_id, 'doc_id' => $docId, 'response' => $response]);
+        }
 
         if (($response['status'] ?? null) === 'PENDIENTE') {
             $order->delete_meta_data('_apisunat_document_status');
@@ -168,38 +186,98 @@ class ApiSunatService {
     private static function buildPayload(\WC_Order $order, array $branch): array {
         $mapped = OrderMapper::map($order);
 
+        $tax_classes = self::getTaxClassesMap();
         $items_data = [];
         foreach ($order->get_items() as $item) {
             $product = $item instanceof \WC_Order_Item_Product ? $item->get_product() : null;
+            $tax_class = $product ? $product->get_tax_class() : '';
             $items_data[] = [
-                'item'    => $item->get_data(),
-                'product' => $product ? $product->get_data() : [],
+                'item'          => $item->get_data(),
+                'product'       => $product ? $product->get_data() : [],
+                'tax_class'     => $tax_class,
+                'tax_class_slug' => sanitize_title($tax_class),
+                'tax_info'      => $tax_classes[$tax_class] ?? $tax_classes[''] ?? null,
+                'taxes'         => $item->get_taxes(),
             ];
         }
 
         return [
             'plugin_data' => self::pluginConfig($branch),
-            'order'       => $mapped,
             'order_data'  => $order->get_data(),
             'items_data'  => $items_data,
+            'tax_data'    => self::getRawTaxData($order),
+            'order'       => $mapped,
         ];
     }
 
-    private static function pluginConfig(array $branch): array {
+    private static function getTaxClassesMap(): array {
+        $map = [];
+        $classes = \WC_Tax::get_tax_classes();
+        foreach ($classes as $class) {
+            $slug = sanitize_title($class);
+            $rates = \WC_Tax::get_rates_for_tax_class($slug);
+            if (!empty($rates)) {
+                $rate = reset($rates);
+                $map[$class] = [
+                    'rate'       => (string) $rate->tax_rate,
+                    'label'      => $rate->tax_rate_name,
+                    'class'      => $class,
+                    'slug'       => $slug,
+                ];
+            }
+        }
+        $standard_rates = \WC_Tax::get_rates_for_tax_class('standard');
+        if (!empty($standard_rates)) {
+            $rate = reset($standard_rates);
+            $map[''] = [
+                'rate'  => (string) $rate->tax_rate,
+                'label' => $rate->tax_rate_name,
+                'class' => 'standard',
+                'slug'  => 'standard',
+            ];
+        }
+        return $map;
+    }
+
+private static function pluginConfig(array $branch): array {
         $branchSeries = $branch['series'] ?? [];
+
         $serieFactura = !empty($branchSeries['factura']) ? $branchSeries['factura'] : (string) Options::getValue('emision.series.factura', 'F001');
         $serieBoleta  = !empty($branchSeries['boleta']) ? $branchSeries['boleta'] : (string) Options::getValue('emision.series.boleta', 'B001');
+        $serieNCFactura = !empty($branchSeries['nota_credito_factura']) ? $branchSeries['nota_credito_factura'] : (string) Options::getValue('emision.series.nota_credito_factura', 'FC01');
+        $serieNCBoleta = !empty($branchSeries['nota_credito_boleta']) ? $branchSeries['nota_credito_boleta'] : (string) Options::getValue('emision.series.nota_credito_boleta', 'BC01');
+
+        $mapping = Options::getValue('advanced.checkout_mapping', []);
 
         return [
             'personaId'          => $branch['persona_id'],
             'personaToken'       => $branch['persona_token'],
-            'noDocId'            => Options::getValue('documento_cliente.no_doc') ? 'true' : 'false',
+            'noDocId'            => Options::getValue('emision.boleta_sin_info_cliente') ? 'true' : 'false',
             'serie01'            => $serieFactura,
             'serie03'            => $serieBoleta,
-            'affectation'        => TaxMapper::resolve(),
-            'affectation_factor' => (string) self::getWcTaxRate(),
-            //'issueTime'          => Options::getValue('emision.include_time') ? 'true' : 'false',
-            //'shipping_cost'      => Options::getValue('emision.shipping_cost') ? 'true' : 'false',
+            'serie07F'           => $serieNCFactura,
+            'serie07B'           => $serieNCBoleta,
+            'emision_modo'       => Options::getValue('emision.modo', 'manual'),
+            'emision_estado'     => Options::getValue('emision.estado_emision', 'wc-completed'),
+            'moneda'             => get_woocommerce_currency(),
+            'detraccion'         => [
+                'enabled'          => Options::getValue('detraccion.enabled', false) ? 'true' : 'false',
+                'codigo_default'   => Options::getValue('detraccion.medio_de_pago', '001'),
+                'porcentaje'       => (float) Options::getValue('detraccion.porcentaje', 12),
+                'cuenta_banco'     => Options::getValue('detraccion.cuenta_bancaria', ''),
+                'monto_minimo_soles' => \Atm\Apisunatwp\Mappers\DetraccionMapper::MONTO_MINIMO_SOLES,
+                'tipo_de_cambio'   => (string) Options::getValue('detraccion.tipo_de_cambio', ''),
+            ],
+            'checkout_meta_keys' => [
+                'tipo_comprobante' => (string) ($mapping['tipo_comprobante'] ?? '_billing_apisunat_document_type'),
+                'tipo_documento'   => (string) ($mapping['tipo_documento'] ?? '_billing_apisunat_customer_id_type'),
+                'numero_documento' => (string) ($mapping['numero_documento'] ?? '_billing_apisunat_customer_id'),
+            ],
+            'impuestos'          => [
+                'tipo_tributo' => (string) Options::getValue('impuestos.tipo_tributo', 'gravado18'),
+                'afectaciones' => Options::getValue('impuestos.afectacion_mapping', []),
+            ],
+            'branches'           => Options::getValue('api.branches', []),
             'debug'              => Options::getValue('advanced.debug') ? 'true' : 'false',
             'custom_meta_data'   => Options::getValue('advanced.custom_checkout') ? 'true' : 'false',
         ];
@@ -216,27 +294,74 @@ class ApiSunatService {
         return '18';
     }
 
+    private static function getRawTaxData(\WC_Order $order): array {
+        $tax_data = [
+            'order_taxes'  => $order->get_taxes(),
+            'tax_totals'   => $order->get_tax_totals(),
+            'tax_lines'    => [],
+            'tax_classes'  => \WC_Tax::get_tax_classes(),
+            'all_rates'    => [],
+        ];
+
+        foreach ($tax_data['tax_classes'] as $class) {
+            $slug = sanitize_title($class);
+            $rates = \WC_Tax::get_rates_for_tax_class($slug);
+            if (!empty($rates)) {
+                $tax_data['all_rates'][$slug] = array_map(function ($rate) {
+                    return [
+                        'rate'    => (string) $rate->tax_rate,
+                        'label'   => $rate->tax_rate_name,
+                        'shipping'=> $rate->tax_rate_shipping ? 'yes' : 'no',
+                        'compound'=> $rate->tax_rate_compound ? 'yes' : 'no',
+                    ];
+                }, $rates);
+            }
+        }
+
+        foreach ($order->get_items('tax') as $tax_item) {
+            $tax_data['tax_lines'][] = $tax_item->get_data();
+        }
+
+        foreach ($order->get_items() as $item) {
+            $tax_data['item_taxes'][] = [
+                'item_id'    => $item->get_id(),
+                'name'       => $item->get_name(),
+                'tax_class'  => $item->get_tax_class(),
+                'tax_status' => $item->get_tax_status(),
+                'taxes'      => $item->get_taxes(),
+            ];
+        }
+
+        $tax_data['wc_settings'] = [
+            'calc_taxes'          => get_option('woocommerce_calc_taxes', 'no'),
+            'prices_include_tax'  => get_option('woocommerce_prices_include_tax', 'no'),
+            'tax_based_on'        => get_option('woocommerce_tax_based_on', 'shipping'),
+            'shipping_tax_class'  => get_option('woocommerce_shipping_tax_class', ''),
+            'tax_round_at_subtotal' => get_option('woocommerce_tax_round_at_subtotal', 'no'),
+            'tax_display_shop'    => get_option('woocommerce_tax_display_shop', 'excl'),
+            'tax_display_cart'    => get_option('woocommerce_tax_display_cart', 'excl'),
+        ];
+
+        return $tax_data;
+    }
+
     private static function isAlreadyProcessed(\WC_Order $order): bool {
         return in_array((string) $order->get_meta('_apisunat_document_status'), ['PENDIENTE', 'ACEPTADO'], true);
     }
 
     private static function hasRequiredDocument(\WC_Order $order): bool {
-        if (Options::getValue('documento_cliente.no_doc')) {
+        $docId   = (string) $order->get_meta('_billing_apisunat_id_number');
+        $docType = (string) ($order->get_meta('_billing_apisunat_cpe_type') ?: '03');
+
+        if ($docId !== '') {
             return true;
         }
 
-        $docType = (string) ($order->get_meta('_sunat_cpe_type') ?: '03');
-        $docId   = (string) $order->get_meta('_sunat_id_number');
-
-        if ($docType === '01' && Options::getValue('documento_cliente.require_for_factura', true)) {
-            return $docId !== '';
+        if (Options::getValue('emision.boleta_sin_info_cliente', false)) {
+            return true;
         }
 
-        if ($docType === '03' && Options::getValue('documento_cliente.require_for_boleta', false)) {
-            return $docId !== '';
-        }
-
-        return true;
+        return false;
     }
 
     private static function request(string $method, string $url, ?array $body = null): array {
