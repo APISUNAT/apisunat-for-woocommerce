@@ -58,10 +58,27 @@ class Activator {
             }
         }
 
-        $std = get_option('woocommerce_default_country');
-        if ($std && !get_option('apisunat_tax_setup_done')) {
-            $rate = [
-                'tax_rate_country'  => '',
+        if (get_option('apisunat_tax_setup_done')) {
+            return;
+        }
+
+        $existing = \WC_Tax::find_rates([
+            'country'   => 'PE',
+            'tax_class' => '',
+        ]);
+
+        $hasIgv = false;
+        foreach ($existing as $rate) {
+            $value = (float) ($rate['rate'] ?? 0);
+            if ($value >= 17.5 && $value <= 18.5) {
+                $hasIgv = true;
+                break;
+            }
+        }
+
+        if (!$hasIgv) {
+            \WC_Tax::_insert_tax_rate([
+                'tax_rate_country'  => 'PE',
                 'tax_rate_state'    => '',
                 'tax_rate'          => '18',
                 'tax_rate_name'     => 'IGV',
@@ -70,9 +87,9 @@ class Activator {
                 'tax_rate_shipping' => 1,
                 'tax_rate_order'    => 0,
                 'tax_rate_class'    => '',
-            ];
-                \WC_Tax::_insert_tax_rate($rate);
-            update_option('apisunat_tax_setup_done', '1');
+            ]);
         }
+
+        update_option('apisunat_tax_setup_done', '1');
     }
 }
