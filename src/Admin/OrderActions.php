@@ -123,7 +123,8 @@ class OrderActions {
         }
 
         $nonce = isset($_REQUEST['_wpnonce']) ? sanitize_text_field(wp_unslash($_REQUEST['_wpnonce'])) : '';
-        if (!$nonce || !wp_verify_nonce($nonce, 'bulk-orders')) {
+        $valid = $nonce && (wp_verify_nonce($nonce, 'bulk-orders') || wp_verify_nonce($nonce, 'bulk-posts'));
+        if (!$valid) {
             return $redirect;
         }
 
