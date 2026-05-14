@@ -42,7 +42,7 @@ class SendOrderJob {
                 $order->save();
             }
 
-            throw $e; // Re-throw so Action Scheduler can retry transient failures
+            throw $e; // Surface failure to Action Scheduler (single-shot async actions are not auto-retried).
         }
     }
 }
