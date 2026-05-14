@@ -122,6 +122,11 @@ class OrderActions {
             return $redirect;
         }
 
+        $nonce = isset($_REQUEST['_wpnonce']) ? sanitize_text_field(wp_unslash($_REQUEST['_wpnonce'])) : '';
+        if (!$nonce || !wp_verify_nonce($nonce, 'bulk-orders')) {
+            return $redirect;
+        }
+
         $ok    = 0;
         $fail  = 0;
         $skipped = 0;
