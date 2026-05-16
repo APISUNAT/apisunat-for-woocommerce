@@ -82,7 +82,7 @@ class Options {
             return ['persona_id' => '', 'persona_token' => '', 'series' => []];
         }
 
-        $metaKey = trim((string) self::getValue('api.meta_key', ''));
+        $metaKey = trim((string) self::getValue('api.branch_meta_key', ''));
         if ($metaKey !== '' && $order) {
             $metaValue = (string) $order->get_meta($metaKey);
             if ($metaValue !== '') {
@@ -130,14 +130,27 @@ class Options {
         $docType = '';
         if (!empty($mapping['tipo_documento'])) {
             $raw = (string) $order->get_meta($mapping['tipo_documento']);
-            $docDni = $mapping['doc_dni'] ?? '1';
-            $docRuc = $mapping['doc_ruc'] ?? '6';
-            $docPasaporte = $mapping['doc_pasaporte'] ?? '7';
-            $docOtros = $mapping['doc_otros'] ?? 'B';
-            if ($raw === $docDni) $docType = '1';
-            elseif ($raw === $docRuc) $docType = '6';
-            elseif ($raw === $docPasaporte) $docType = '7';
-            elseif ($raw === $docOtros) $docType = 'B';
+            $docMap = [
+                'doc_sin'         => '-',
+                'doc_dni'         => '1',
+                'doc_ruc'         => '6',
+                'doc_cpp'         => 'H',
+                'doc_pasaporte'   => '7',
+                'doc_carnet_ext'  => '4',
+                'doc_tam'         => 'E',
+                'doc_cedula_dip'  => 'A',
+                'doc_salvoconducto' => 'G',
+                'doc_tin'         => 'C',
+                'doc_in'          => 'D',
+                'doc_otros'       => 'B',
+                'doc_trib'        => '0',
+            ];
+            foreach ($docMap as $key => $val) {
+                if ($raw === ($mapping[$key] ?? $val)) {
+                    $docType = $val;
+                    break;
+                }
+            }
         }
 
         $docNumber = '';

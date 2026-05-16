@@ -166,10 +166,19 @@ class OrderMetaBox {
 
         $cpeOptions = ['03' => __('Boleta', 'apisunatv2'), '01' => __('Factura', 'apisunatv2')];
         $idOptions  = [
+            '-' => __('Sin documento', 'apisunatv2'),
             '1' => __('DNI', 'apisunatv2'),
             '6' => __('RUC', 'apisunatv2'),
+            'H' => __('CPP - Carné Temporal de Permanencia', 'apisunatv2'),
             '7' => __('Pasaporte', 'apisunatv2'),
-            'B' => __('Otro', 'apisunatv2'),
+            '4' => __('Carnet de extranjería', 'apisunatv2'),
+            'E' => __('TAM - Tarjeta Andina de Migración', 'apisunatv2'),
+            'A' => __('Cédula Diplomática', 'apisunatv2'),
+            'G' => __('Salvoconducto', 'apisunatv2'),
+            'C' => __('TIN - Tax Identification Number', 'apisunatv2'),
+            'D' => __('IN - Identification Number', 'apisunatv2'),
+            'B' => __('ID. PERS. NAT. (no domiciliado)', 'apisunatv2'),
+            '0' => __('DOC. TRIB. (no domiciliado)', 'apisunatv2'),
         ];
         ?>
         <div class="order_sunat_fields">

@@ -90,7 +90,7 @@ class ApiSunatService {
                 throw new \RuntimeException(__('Documento del cliente requerido. Completa el panel "API Sunat" en el pedido.', 'apisunatv2'));
             }
 
-            $payload  = self::buildPayload($order, $branch);
+            $payload  = self::buildPayload($order);
 
             if (Options::getValue('advanced.debug')) {
                 self::logger()->debug('CPE Payload', ['order_id' => $order_id, 'payload' => $payload]);
@@ -136,10 +136,7 @@ class ApiSunatService {
             throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
         }
 
-        $payload = self::buildPayload($order, $branch);
-        $branchSeries = $branch['series'] ?? [];
-        $payload['plugin_data']['serie07F'] = !empty($branchSeries['nota_credito_factura']) ? $branchSeries['nota_credito_factura'] : (string) Options::getValue('emision.series.nota_credito_factura', 'FC01');
-        $payload['plugin_data']['serie07B'] = !empty($branchSeries['nota_credito_boleta']) ? $branchSeries['nota_credito_boleta'] : (string) Options::getValue('emision.series.nota_credito_boleta', 'BC01');
+        $payload = self::buildPayload($order);
         $payload['document_data'] = [
             'reason'         => $reason,
             'documentId'     => $docId,
@@ -220,7 +217,7 @@ class ApiSunatService {
         }
     }
 
-    private static function buildPayload(\WC_Order $order, array $branch): array {
+    private static function buildPayload(\WC_Order $order): array {
         $mapped = OrderMapper::map($order);
 
         $tax_classes = self::getTaxClassesMap();
@@ -255,10 +252,19 @@ class ApiSunatService {
         ));
 
         return [
-            'plugin_data' => self::pluginConfig($branch),
+            'plugin_data' => self::pluginConfig(),
             'order_data'  => $order_data,
             'items_data'  => $items_data,
             'tax_data'    => self::getRawTaxData($order),
+            'wc_settings' => [
+                'calc_taxes'          => get_option('woocommerce_calc_taxes', 'no'),
+                'prices_include_tax'  => get_option('woocommerce_prices_include_tax', 'no'),
+                'tax_based_on'        => get_option('woocommerce_tax_based_on', 'shipping'),
+                'shipping_tax_class'  => get_option('woocommerce_shipping_tax_class', ''),
+                'tax_round_at_subtotal' => get_option('woocommerce_tax_round_at_subtotal', 'no'),
+                'tax_display_shop'    => get_option('woocommerce_tax_display_shop', 'excl'),
+                'tax_display_cart'    => get_option('woocommerce_tax_display_cart', 'excl'),
+            ],
             // 'order'       => $mapped, TODO for the future specific map
         ];
     }
@@ -292,48 +298,12 @@ class ApiSunatService {
         return $map;
     }
 
-private static function pluginConfig(array $branch): array {
-        $branchSeries = $branch['series'] ?? [];
-
-        $serieFactura = !empty($branchSeries['factura']) ? $branchSeries['factura'] : (string) Options::getValue('emision.series.factura', 'F001');
-        $serieBoleta  = !empty($branchSeries['boleta']) ? $branchSeries['boleta'] : (string) Options::getValue('emision.series.boleta', 'B001');
-        $serieNCFactura = !empty($branchSeries['nota_credito_factura']) ? $branchSeries['nota_credito_factura'] : (string) Options::getValue('emision.series.nota_credito_factura', 'FC01');
-        $serieNCBoleta = !empty($branchSeries['nota_credito_boleta']) ? $branchSeries['nota_credito_boleta'] : (string) Options::getValue('emision.series.nota_credito_boleta', 'BC01');
-
-        $mapping = Options::getValue('advanced.checkout_mapping', []);
-
-        return [
-            'personaId'          => $branch['persona_id'],
-            'personaToken'       => $branch['persona_token'],
-            'noDocId'            => Options::getValue('emision.boleta_sin_info_cliente') ? 'true' : 'false',
-            'serie01'            => $serieFactura,
-            'serie03'            => $serieBoleta,
-            'serie07F'           => $serieNCFactura,
-            'serie07B'           => $serieNCBoleta,
-            'emision_modo'       => Options::getValue('emision.modo', 'manual'),
-            'emision_estado'     => Options::getValue('emision.estado_emision', 'wc-completed'),
-            'moneda'             => get_woocommerce_currency(),
-            'detraccion'         => [
-                'enabled'          => Options::getValue('detraccion.enabled', false) ? 'true' : 'false',
-                'codigo_default'   => Options::getValue('detraccion.medio_de_pago', '001'),
-                'porcentaje'       => (float) Options::getValue('detraccion.porcentaje', 12),
-                'cuenta_banco'     => Options::getValue('detraccion.cuenta_bancaria', ''),
-                'monto_minimo_soles' => \Atm\Apisunatwp\Mappers\DetraccionMapper::MONTO_MINIMO_SOLES,
-                'tipo_de_cambio'   => (string) Options::getValue('detraccion.tipo_de_cambio', ''),
-            ],
-            'checkout_meta_keys' => [
-                'tipo_comprobante' => (string) ($mapping['tipo_comprobante'] ?? '_billing_apisunat_document_type'),
-                'tipo_documento'   => (string) ($mapping['tipo_documento'] ?? '_billing_apisunat_customer_id_type'),
-                'numero_documento' => (string) ($mapping['numero_documento'] ?? '_billing_apisunat_customer_id'),
-            ],
-            'impuestos'          => [
-                'tipo_tributo' => (string) Options::getValue('impuestos.tipo_tributo', 'gravado18'),
-                'afectaciones' => Options::getValue('impuestos.afectacion_mapping', []),
-            ],
-            'branches'           => Options::getValue('api.branches', []),
-            'debug'              => Options::getValue('advanced.debug') ? 'true' : 'false',
-            'custom_meta_data'   => Options::getValue('advanced.custom_checkout') ? 'true' : 'false',
-        ];
+    private static function pluginConfig(): array {
+        $config = Options::get();
+        if (!empty($config['advanced']['multitienda'])) {
+            return ['stores' => $config['stores'] ?? []];
+        }
+        return $config;
     }
 
     private static function getWcTaxRate(): string {
@@ -384,16 +354,6 @@ private static function pluginConfig(array $branch): array {
                 'taxes'      => $item->get_taxes(),
             ];
         }
-
-        $tax_data['wc_settings'] = [
-            'calc_taxes'          => get_option('woocommerce_calc_taxes', 'no'),
-            'prices_include_tax'  => get_option('woocommerce_prices_include_tax', 'no'),
-            'tax_based_on'        => get_option('woocommerce_tax_based_on', 'shipping'),
-            'shipping_tax_class'  => get_option('woocommerce_shipping_tax_class', ''),
-            'tax_round_at_subtotal' => get_option('woocommerce_tax_round_at_subtotal', 'no'),
-            'tax_display_shop'    => get_option('woocommerce_tax_display_shop', 'excl'),
-            'tax_display_cart'    => get_option('woocommerce_tax_display_cart', 'excl'),
-        ];
 
         return $tax_data;
     }

@@ -23,7 +23,7 @@ class TaxMapper {
         }
         $slug = sanitize_title($tax_class);
         $mapping = Options::getValue('impuestos.afectacion_mapping', []);
-        $stored = $mapping[$slug] ?? Options::getValue('impuestos.tipo_tributo', 'gravado18');
+        $stored = $mapping[$slug] ?? Options::getValue('impuestos.afectacion_default', 'gravado18');
         return self::$slugToSunat[$stored] ?? self::GRAVADO;
     }
 }

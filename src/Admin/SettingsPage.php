@@ -21,6 +21,7 @@ class SettingsPage {
         add_action('wp_ajax_apisunat_delete_tax_rate',    [self::class, 'ajaxDeleteTaxRate']);
         add_action('wp_ajax_apisunat_add_tax_rate',      [self::class, 'ajaxAddTaxRate']);
         add_action('admin_post_apisunatv2_save',         [self::class, 'handleSave']);
+        add_action('admin_notices',                      [self::class, 'adminNotices']);
     }
 
     public static function addMenu(): void {
@@ -56,32 +57,69 @@ class SettingsPage {
         exit;
     }
 
+    public static function adminNotices(): void {
+        $dropped = get_transient('apisunatv2_branches_dropped');
+        if ($dropped) {
+            delete_transient('apisunatv2_branches_dropped');
+            echo '<div class="notice notice-warning is-dismissible"><p>';
+            echo esc_html(sprintf(
+                _n('%s sucursal fue ignorada porque faltaban campos obligatorios o la etiqueta se duplicaba.',
+                '%s sucursales fueron ignoradas porque faltaban campos obligatorios o las etiquetas se duplicaban.',
+                $dropped,
+                'apisunatv2'),
+                $dropped
+            ));
+            echo '</p></div>';
+        }
+    }
+
     public static function sanitize(array $input): array {
         // Cargar solo si es necesario y de forma parcial
         $output = [];
 
         if (isset($input['api']) && is_array($input['api'])) {
-            $output['api']['meta_key'] = sanitize_text_field((string) ($input['api']['meta_key'] ?? ''));
+            $output['api']['branch_meta_key'] = sanitize_text_field((string) ($input['api']['branch_meta_key'] ?? ''));
 
                 if (isset($input['api']['branches']) && is_array($input['api']['branches'])) {
                     $branches = [];
+                    $seenLabels = [];
+                    $dropped = 0;
                     foreach ($input['api']['branches'] as $branch) {
                         if (!is_array($branch)) {
                             continue;
                         }
+                        $label = sanitize_text_field((string) ($branch['label'] ?? ''));
+                        $persona_id = sanitize_text_field((string) ($branch['persona_id'] ?? ''));
+                        $persona_token = sanitize_text_field((string) ($branch['persona_token'] ?? ''));
+                        if ($label === '' || $persona_id === '' || $persona_token === '') {
+                            $dropped++;
+                            continue;
+                        }
+                        if (isset($seenLabels[$label])) {
+                            $dropped++;
+                            continue;
+                        }
+                        $seenLabels[$label] = true;
                         $series = $branch['series'] ?? [];
                         $sanitized_series = [];
                         foreach (['factura', 'boleta', 'nota_credito_factura', 'nota_credito_boleta'] as $k) {
                             $sanitized_series[$k] = sanitize_text_field((string) ($series[$k] ?? ''));
                         }
+                        if ($sanitized_series['factura'] === '' || $sanitized_series['boleta'] === '') {
+                            $dropped++;
+                            continue;
+                        }
                         $branches[] = [
-                            'label'        => sanitize_text_field((string) ($branch['label']        ?? '')),
-                            'persona_id'    => sanitize_text_field((string) ($branch['persona_id']    ?? '')),
-                            'persona_token' => sanitize_text_field((string) ($branch['persona_token'] ?? '')),
+                            'label'        => $label,
+                            'persona_id'    => $persona_id,
+                            'persona_token' => $persona_token,
                             'series'        => $sanitized_series,
                         ];
                     }
                     $output['api']['branches'] = !empty($branches) ? $branches : ($output['api']['branches'] ?? []);
+                    if ($dropped > 0) {
+                        set_transient('apisunatv2_branches_dropped', $dropped, 30);
+                    }
                 }
         }
 
@@ -104,8 +142,8 @@ class SettingsPage {
 
         if (isset($input['impuestos']) && is_array($input['impuestos'])) {
             $allowed = ['gravado10', 'gravado105', 'gravado18', 'exonerado', 'inafecto'];
-            $output['impuestos']['tipo_tributo'] = in_array(($input['impuestos']['tipo_tributo'] ?? 'gravado18'), $allowed, true)
-                ? $input['impuestos']['tipo_tributo'] : 'gravado18';
+            $output['impuestos']['afectacion_default'] = in_array(($input['impuestos']['afectacion_default'] ?? 'gravado18'), $allowed, true)
+                ? $input['impuestos']['afectacion_default'] : 'gravado18';
             if (isset($input['impuestos']['afectacion_mapping']) && is_array($input['impuestos']['afectacion_mapping'])) {
                 $allowedMap = ['gravado10', 'gravado105', 'gravado18', 'exonerado', 'inafecto'];
                 foreach ($input['impuestos']['afectacion_mapping'] as $class => $afectacion) {
@@ -129,16 +167,106 @@ class SettingsPage {
         if (isset($input['advanced']) && is_array($input['advanced'])) {
             $output['advanced']['debug']           = !empty($input['advanced']['debug']);
             $output['advanced']['custom_checkout'] = !empty($input['advanced']['custom_checkout']);
+            $output['advanced']['multitienda']     = !empty($input['advanced']['multitienda']);
+            $output['advanced']['store_meta_key']  = sanitize_text_field((string) ($input['advanced']['store_meta_key'] ?? ''));
 
             if (isset($input['advanced']['checkout_mapping']) && is_array($input['advanced']['checkout_mapping'])) {
                 $mapping = $input['advanced']['checkout_mapping'];
-                foreach (['tipo_comprobante', 'tipo_documento', 'numero_documento', 'cpe_factura', 'cpe_boleta', 'doc_dni', 'doc_ruc', 'doc_pasaporte', 'doc_otros'] as $k) {
+                foreach ([
+                    'tipo_comprobante', 'tipo_documento', 'numero_documento',
+                    'cpe_factura', 'cpe_boleta',
+                    'doc_sin', 'doc_dni', 'doc_ruc', 'doc_cpp', 'doc_pasaporte',
+                    'doc_carnet_ext', 'doc_tam', 'doc_cedula_dip', 'doc_salvoconducto',
+                    'doc_tin', 'doc_in', 'doc_otros', 'doc_trib',
+                ] as $k) {
                     $output['advanced']['checkout_mapping'][$k] = sanitize_text_field((string) ($mapping[$k] ?? ($output['advanced']['checkout_mapping'][$k] ?? '')));
                 }
             }
         }
 
+        if (isset($input['stores']) && is_array($input['stores'])) {
+            $existing = Options::getValue('stores', []);
+            if (!is_array($existing)) {
+                $existing = [];
+            }
+            foreach ($input['stores'] as $i => $store) {
+                if (!is_array($store)) {
+                    continue;
+                }
+                // Always update label
+                $existing[$i]['label'] = sanitize_text_field((string) ($store['label'] ?? sprintf(__('Tienda %d', 'apisunatv2'), $i + 1)));
+
+                if (isset($store['api'])) {
+                    $sanitizedApi = [];
+                    $sanitizedApi['branch_meta_key'] = sanitize_text_field((string) ($store['api']['branch_meta_key'] ?? ''));
+                    if (isset($store['api']['branches']) && is_array($store['api']['branches'])) {
+                        $branches = [];
+                        $seenLabels = [];
+                        $dropped = 0;
+                        foreach ($store['api']['branches'] as $branch) {
+                            if (!is_array($branch)) { continue; }
+                            $label = sanitize_text_field((string) ($branch['label'] ?? ''));
+                            $persona_id = sanitize_text_field((string) ($branch['persona_id'] ?? ''));
+                            $persona_token = sanitize_text_field((string) ($branch['persona_token'] ?? ''));
+                            if ($label === '' || $persona_id === '' || $persona_token === '') { $dropped++; continue; }
+                            if (isset($seenLabels[$label])) { $dropped++; continue; }
+                            $seenLabels[$label] = true;
+                            $series = $branch['series'] ?? [];
+                            $sanitized_series = [];
+                            foreach (['factura', 'boleta', 'nota_credito_factura', 'nota_credito_boleta'] as $k) {
+                                $sanitized_series[$k] = sanitize_text_field((string) ($series[$k] ?? ''));
+                            }
+                            if ($sanitized_series['factura'] === '' || $sanitized_series['boleta'] === '') { $dropped++; continue; }
+                            $branches[] = ['label' => $label, 'persona_id' => $persona_id, 'persona_token' => $persona_token, 'series' => $sanitized_series];
+                        }
+                        $sanitizedApi['branches'] = !empty($branches) ? $branches : [];
+                        if ($dropped > 0) { set_transient('apisunatv2_branches_dropped', $dropped, 30); }
+                    }
+                    $existing[$i]['api'] = $sanitizedApi;
+                }
+
+                if (isset($store['emision'])) {
+                    $emision = $store['emision'];
+                    $sanitizedEmision = [];
+                    $sanitizedEmision['modo'] = in_array(($emision['modo'] ?? 'manual'), ['manual', 'automatico'], true) ? $emision['modo'] : 'manual';
+                    $sanitizedEmision['estado_emision'] = in_array(($emision['estado_emision'] ?? 'wc-completed'), ['wc-completed', 'wc-processing', 'wc-on-hold'], true) ? $emision['estado_emision'] : 'wc-completed';
+                    $series = $emision['series'] ?? [];
+                    foreach (['factura', 'boleta', 'nota_credito_factura', 'nota_credito_boleta'] as $k) {
+                        $sanitizedEmision['series'][$k] = sanitize_text_field((string) ($series[$k] ?? ''));
+                    }
+                    $sanitizedEmision['include_time']  = !empty($emision['include_time']);
+                    $sanitizedEmision['shipping_cost'] = !empty($emision['shipping_cost']);
+                    $sanitizedEmision['boleta_sin_info_cliente'] = !empty($emision['boleta_sin_info_cliente']);
+                    $existing[$i]['emision'] = $sanitizedEmision;
+                }
+
+                if (isset($store['detraccion'])) {
+                    $d = $store['detraccion'];
+                    $sanitizedDetraccion = [];
+                    $sanitizedDetraccion['enabled']            = !empty($d['enabled']);
+                    $sanitizedDetraccion['tipo_de_detraccion']   = sanitize_text_field((string) ($d['tipo_de_detraccion'] ?? ''));
+                    $sanitizedDetraccion['porcentaje'] = max(0, min(100, absint($d['porcentaje'] ?? 12)));
+                    $sanitizedDetraccion['medio_de_pago']  = sanitize_text_field((string) ($d['medio_de_pago'] ?? '001'));
+                    $sanitizedDetraccion['cuenta_bancaria'] = sanitize_text_field((string) ($d['cuenta_bancaria'] ?? ''));
+                    $sanitizedDetraccion['tipo_de_cambio']  = sanitize_text_field((string) ($d['tipo_de_cambio'] ?? ''));
+                    $existing[$i]['detraccion'] = $sanitizedDetraccion;
+                }
+            }
+            $output['stores'] = $existing;
+        }
+
         Options::flushCache();
+
+        if (!empty($output['advanced']['multitienda']) && empty($output['stores'])) {
+            $existing = Options::get();
+            $output['stores'] = [[
+                'label'      => __('Tienda 1', 'apisunatv2'),
+                'api'        => $existing['api'] ?? [],
+                'emision'    => $existing['emision'] ?? [],
+                'detraccion' => $existing['detraccion'] ?? [],
+            ]];
+        }
+
         return $output;
     }
 
@@ -373,10 +501,51 @@ class SettingsPage {
             wp_die(esc_html__('Permiso denegado', 'apisunatv2'));
         }
 
+        $multitienda = self::isMultiStore();
+
+        if ($multitienda && isset($_GET['add_store'])) {
+            $stores = Options::getValue('stores', []);
+            $stores[] = ['label' => sprintf(__('Tienda %d', 'apisunatv2'), count($stores) + 1)];
+            update_option(Options::OPTION_KEY . '_stores', $stores);
+            Options::flushCache();
+            wp_redirect(add_query_arg(['store' => count($stores) - 1], remove_query_arg('add_store')));
+            exit;
+        }
+
+        if ($multitienda && isset($_GET['delete_store'])) {
+            $delIdx = (int) $_GET['delete_store'];
+            $stores = Options::getValue('stores', []);
+            if (isset($stores[$delIdx]) && count($stores) > 1) {
+                array_splice($stores, $delIdx, 1);
+                update_option(Options::OPTION_KEY . '_stores', $stores);
+                Options::flushCache();
+            }
+            $redirectIdx = min($delIdx, max(0, count($stores) - 1));
+            wp_redirect(add_query_arg(['store' => $redirectIdx], remove_query_arg('delete_store')));
+            exit;
+        }
+
         $currentTab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : 'api';
         $tabs      = self::tabs();
         if (!isset($tabs[$currentTab])) {
             $currentTab = 'api';
+        }
+
+        $multitienda = self::isMultiStore();
+        $storeTabs = [];
+        $currentStore = 0;
+        if ($multitienda && in_array($currentTab, ['api', 'emision', 'detraccion'], true)) {
+            $stores = Options::getValue('stores', []);
+            if (empty($stores)) {
+                $stores = [['label' => __('Tienda 1', 'apisunatv2')]];
+            }
+            foreach ($stores as $i => $store) {
+                $storeTabs[$i] = $store['label'] ?? sprintf(__('Tienda %d', 'apisunatv2'), $i + 1);
+            }
+            $currentStore = isset($_GET['store']) ? max(0, (int) $_GET['store']) : 0;
+            if (!isset($storeTabs[$currentStore])) {
+                $currentStore = 0;
+            }
         }
         ?>
         <div class="wrap apisunatv2-settings">
@@ -411,6 +580,28 @@ class SettingsPage {
                 <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                     <input type="hidden" name="action" value="apisunatv2_save">
                     <?php wp_nonce_field('apisunatv2_settings_save'); ?>
+
+                    <?php if (!empty($storeTabs)): ?>
+                    <ul class="subsubsub" style="margin-bottom:4px;">
+                        <?php foreach ($storeTabs as $i => $label): ?>
+                        <li>
+                            <a href="<?= esc_url(add_query_arg(['store' => $i])) ?>" class="<?= $currentStore === $i ? 'current' : '' ?>"><?= esc_html($label) ?></a>
+                            <?php if ($i === $currentStore && count($storeTabs) > 1): ?>
+                            <a href="<?= esc_url(add_query_arg(['delete_store' => $i])) ?>" class="apisunat-delete-store" style="color:#b32d2e;text-decoration:none;margin-left:2px;" title="<?= esc_attr__('Eliminar tienda', 'apisunatv2') ?>">✕</a>
+                            <?php endif; ?>
+                            <?= $i < count($storeTabs) - 1 ? ' |' : '' ?>
+                        </li>
+                        <?php endforeach; ?>
+                        <li>
+                            <a href="<?= esc_url(add_query_arg(['add_store' => '1'])) ?>" class="button button-small" style="margin-left:8px;vertical-align:baseline;height:auto;line-height:2;min-height:0;"><?= esc_html__('+', 'apisunatv2') ?></a>
+                        </li>
+                    </ul>
+                    <div style="clear:both;padding-top:4px;">
+                        <label style="display:block;margin-bottom:2px;"><?= esc_html__('Nombre de tienda', 'apisunatv2') ?></label>
+                        <input type="text" name="apisunatv2_settings[stores][<?= (int) $currentStore ?>][label]" value="<?= esc_attr($storeTabs[$currentStore]) ?>" class="regular-text" style="max-width:300px;">
+                    </div>
+                    <?php endif; ?>
+
                     <table class="form-table" role="presentation">
                         <?php
                         $schema    = self::schema();
@@ -424,7 +615,12 @@ class SettingsPage {
                                 call_user_func($section['desc']);
                                 echo '</td></tr>';
                             }
+                            $storePrefix = '';
+                            if ($multitienda && in_array($section['id'], ['apisunat_api', 'apisunat_emision', 'apisunat_detraccion'], true)) {
+                                $storePrefix = 'stores.' . $currentStore . '.';
+                            }
                             foreach ($section['fields'] as $field) {
+                                $field['key'] = $storePrefix . $field['key'];
                                 $id = self::fieldId($field['key']);
                                 echo '<tr>';
                                 echo '<th scope="row"><label for="' . esc_attr($id) . '">' . esc_html($field['label']) . '</label></th>';
@@ -444,11 +640,14 @@ class SettingsPage {
         <?php
     }
 
+    private static function isMultiStore(): bool {
+        return (bool) Options::getValue('advanced.multitienda', false);
+    }
+
     private static function tabs(): array {
         return [
             'api'        => ['label' => __('API', 'apisunatv2'),        'section' => 'apisunat_api'],
             'emision'    => ['label' => __('Emisión', 'apisunatv2'),    'section' => 'apisunat_emision'],
-            'impuestos'  => ['label' => __('Impuestos', 'apisunatv2'),  'section' => 'apisunat_impuestos'],
             'detraccion' => ['label' => __('Detracción', 'apisunatv2'), 'section' => 'apisunat_detraccion'],
             'avanzado'   => ['label' => __('Avanzado', 'apisunatv2'),   'section' => 'apisunat_avanzado'],
         ];
@@ -478,17 +677,17 @@ class SettingsPage {
         ?>
         <div id="apisunat-branches" class="apisunat-branches">
             <?php foreach ($branches as $i => $branch): ?>
-                <div class="branch-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;">
-                    <input type="text" name="<?= esc_attr($baseName . '][' . $i) ?>][label]" value="<?= esc_attr($branch['label'] ?? '') ?>" placeholder="<?= esc_attr__('Etiqueta', 'apisunatv2') ?>" class="regular-text">
-                    <input type="text" name="<?= esc_attr($baseName . '][' . $i) ?>][persona_id]" value="<?= esc_attr($branch['persona_id'] ?? '') ?>" placeholder="<?= esc_attr__('Persona ID', 'apisunatv2') ?>" class="regular-text">
-                    <input type="password" name="<?= esc_attr($baseName . '][' . $i) ?>][persona_token]" value="<?= esc_attr($branch['persona_token'] ?? '') ?>" placeholder="<?= esc_attr__('Persona Token', 'apisunatv2') ?>" class="regular-text apisunat-token-input" autocomplete="new-password">
+                <div class="branch-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;background:#f6f7f7;padding:12px;border:1px solid #dcdcde;border-radius:4px;">
+                    <input type="text" name="<?= esc_attr($baseName . '][' . $i) ?>][label]" value="<?= esc_attr($branch['label'] ?? '') ?>" placeholder="<?= esc_attr__('Etiqueta', 'apisunatv2') ?>" class="regular-text" required>
+                    <input type="text" name="<?= esc_attr($baseName . '][' . $i) ?>][persona_id]" value="<?= esc_attr($branch['persona_id'] ?? '') ?>" placeholder="<?= esc_attr__('Persona ID', 'apisunatv2') ?>" class="regular-text" required>
+                    <input type="password" name="<?= esc_attr($baseName . '][' . $i) ?>][persona_token]" value="<?= esc_attr($branch['persona_token'] ?? '') ?>" placeholder="<?= esc_attr__('Persona Token', 'apisunatv2') ?>" class="regular-text apisunat-token-input" autocomplete="new-password" required>
                     <button type="button" class="button apisunat-toggle-token" aria-label="<?= esc_attr__('Mostrar/ocultar token', 'apisunatv2') ?>">👁</button>
-                    <button type="button" class="button button-secondary apisunat-remove-branch"><?= esc_html__('Eliminar', 'apisunatv2') ?></button>
                     <button type="button" class="button button-primary apisunat-test-branch"><?= esc_html__('Verificar', 'apisunatv2') ?></button>
+                    <button type="button" class="button apisunat-remove-branch" style="margin-left:auto;background:none;border:none;color:#b32d2e;cursor:pointer;font-size:16px;padding:0 4px;" title="<?= esc_attr__('Eliminar', 'apisunatv2') ?>">✕</button>
                     <span class="apisunat-branch-result" role="status" aria-live="polite"></span>
-                    <div class="branch-series" style="width:100%; margin-top:8px; padding-left: 20px;">
+                    <div class="branch-series" style="width:100%;margin-top:8px;display: flex;align-items: center;">
                         <strong><?= esc_html__('Series', 'apisunatv2') ?></strong>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;margin-left:8px;">
                             <?php foreach ([
                                 'factura' => __('Serie Factura', 'apisunatv2'),
                                 'boleta' => __('Serie Boleta', 'apisunatv2'),
@@ -499,8 +698,7 @@ class SettingsPage {
                                 $s_name = $baseName . '][' . $i . '][series][' . $s_key . ']';
                             ?>
                                 <div>
-                                    <label style="display:block; font-size:12px;"><?= esc_html($s_label) ?></label>
-                                    <input type="text" name="<?= esc_attr($s_name) ?>" value="<?= esc_attr($s_value) ?>" placeholder="<?= esc_attr($s_label) ?>" class="small-text">
+                                    <input type="text" name="<?= esc_attr($s_name) ?>" value="<?= esc_attr($s_value) ?>" placeholder="<?= esc_attr($s_label) ?>" class="" required>
                                 </div>
                             <?php endforeach; ?>
                         </div>
@@ -516,22 +714,22 @@ class SettingsPage {
             document.getElementById('apisunat-add-branch').addEventListener('click', function(){
                 var div = document.createElement('div');
                 div.className = 'branch-row';
-                div.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;';
+                div.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;background:#f6f7f7;padding:12px;border:1px solid #dcdcde;border-radius:4px;';
                 var idx = wrap.querySelectorAll('.branch-row').length;
-                div.innerHTML = '<input type="text" name="<?= esc_attr($baseName) ?>[' + idx + '][label]" placeholder="<?= esc_attr__('Etiqueta', 'apisunatv2') ?>" class="regular-text">' +
-                    '<input type="text" name="<?= esc_attr($baseName) ?>[' + idx + '][persona_id]" placeholder="<?= esc_attr__('Persona ID', 'apisunatv2') ?>" class="regular-text">' +
-                    '<input type="password" name="<?= esc_attr($baseName) ?>[' + idx + '][persona_token]" placeholder="<?= esc_attr__('Persona Token', 'apisunatv2') ?>" class="regular-text apisunat-token-input" autocomplete="new-password">' +
+                div.innerHTML = '<input type="text" name="<?= esc_attr($baseName) ?>][' + idx + '][label]" placeholder="<?= esc_attr__('Etiqueta', 'apisunatv2') ?>" class="regular-text" required>' +
+                    '<input type="text" name="<?= esc_attr($baseName) ?>][' + idx + '][persona_id]" placeholder="<?= esc_attr__('Persona ID', 'apisunatv2') ?>" class="regular-text" required>' +
+                    '<input type="password" name="<?= esc_attr($baseName) ?>][' + idx + '][persona_token]" placeholder="<?= esc_attr__('Persona Token', 'apisunatv2') ?>" class="regular-text apisunat-token-input" autocomplete="new-password" required>' +
                     '<button type="button" class="button apisunat-toggle-token" aria-label="<?= esc_attr__('Mostrar/ocultar token', 'apisunatv2') ?>">👁</button>' +
-                    '<button type="button" class="button button-secondary apisunat-remove-branch"><?= esc_html__('Eliminar', 'apisunatv2') ?></button>' +
                     '<button type="button" class="button button-primary apisunat-test-branch"><?= esc_html__('Verificar', 'apisunatv2') ?></button>' +
+                    '<button type="button" class="button apisunat-remove-branch" style="margin-left:auto;background:none;border:none;color:#b32d2e;cursor:pointer;font-size:16px;padding:0 4px;" title="<?= esc_attr__('Eliminar', 'apisunatv2') ?>">✕</button>' +
                     '<span class="apisunat-branch-result" role="status" aria-live="polite"></span>' +
-                    '<div class="branch-series" style="width:100%; margin-top:8px; padding-left: 20px;">' +
+                    '<div class="branch-series" style="width:100%;margin-top:8px;display: flex;align-items: center;">' +
                         '<strong><?= esc_js(__('Series', 'apisunatv2')) ?></strong>' +
-                        '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">' +
-                            '<div><label style="display:block; font-size:12px;"><?= esc_js(__('Serie Factura', 'apisunatv2')) ?></label><input type="text" name="<?= esc_attr($baseName) ?>[' + idx + '][series][factura]" placeholder="<?= esc_attr__('Serie Factura', 'apisunatv2') ?>" class="small-text"></div>' +
-                            '<div><label style="display:block; font-size:12px;"><?= esc_js(__('Serie Boleta', 'apisunatv2')) ?></label><input type="text" name="<?= esc_attr($baseName) ?>[' + idx + '][series][boleta]" placeholder="<?= esc_attr__('Serie Boleta', 'apisunatv2') ?>" class="small-text"></div>' +
-                            '<div><label style="display:block; font-size:12px;"><?= esc_js(__('Serie NC Factura', 'apisunatv2')) ?></label><input type="text" name="<?= esc_attr($baseName) ?>[' + idx + '][series][nota_credito_factura]" placeholder="<?= esc_attr__('Serie NC Factura', 'apisunatv2') ?>" class="small-text"></div>' +
-                            '<div><label style="display:block; font-size:12px;"><?= esc_js(__('Serie NC Boleta', 'apisunatv2')) ?></label><input type="text" name="<?= esc_attr($baseName) ?>[' + idx + '][series][nota_credito_boleta]" placeholder="<?= esc_attr__('Serie NC Boleta', 'apisunatv2') ?>" class="small-text"></div>' +
+                        '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;margin-left:8px;">' +
+                            '<div><input type="text" name="<?= esc_attr($baseName) ?>][' + idx + '][series][factura]" placeholder="<?= esc_attr__('Serie Factura', 'apisunatv2') ?>" class="" required></div>' +
+                            '<div><input type="text" name="<?= esc_attr($baseName) ?>][' + idx + '][series][boleta]" placeholder="<?= esc_attr__('Serie Boleta', 'apisunatv2') ?>" class="" required></div>' +
+                            '<div><input type="text" name="<?= esc_attr($baseName) ?>][' + idx + '][series][nota_credito_factura]" placeholder="<?= esc_attr__('Serie NC Factura', 'apisunatv2') ?>" class="" required></div>' +
+                            '<div><input type="text" name="<?= esc_attr($baseName) ?>][' + idx + '][series][nota_credito_boleta]" placeholder="<?= esc_attr__('Serie NC Boleta', 'apisunatv2') ?>" class="" required></div>' +
                         '</div>' +
                     '</div>';
                 wrap.insertBefore(div, document.getElementById('apisunat-add-branch'));
@@ -541,6 +739,37 @@ class SettingsPage {
                     e.target.parentElement.remove();
                 }
             });
+            var form = wrap.closest('form');
+            if (form) {
+                form.addEventListener('submit', function(e){
+                    var rows = wrap.querySelectorAll('.branch-row');
+                    var labels = [];
+                    var valid = true;
+                    for (var i = 0; i < rows.length; i++) {
+                        var inputs = rows[i].querySelectorAll('input[required]');
+                        for (var j = 0; j < inputs.length; j++) {
+                            if (!inputs[j].value.trim()) {
+                                inputs[j].style.borderColor = '#d63638';
+                                valid = false;
+                            } else {
+                                inputs[j].style.borderColor = '';
+                            }
+                        }
+                        var labelInput = rows[i].querySelector('input[name$="[label]"]');
+                        if (labelInput && labelInput.value.trim()) {
+                            if (labels.indexOf(labelInput.value.trim()) !== -1) {
+                                labelInput.style.borderColor = '#d63638';
+                                valid = false;
+                            }
+                            labels.push(labelInput.value.trim());
+                        }
+                    }
+                    if (!valid) {
+                        e.preventDefault();
+                        alert('<?= esc_js(__('Corrige los errores antes de guardar: todos los campos son obligatorios y las etiquetas deben ser únicas.', 'apisunatv2')) ?>');
+                    }
+                });
+            }
         })();
         </script>
         <?php
@@ -836,6 +1065,10 @@ class SettingsPage {
                     <td><input type="text" name="<?= esc_attr($prefix) ?>[tipo_documento]" value="<?= esc_attr($mapping['tipo_documento'] ?? '') ?>" placeholder="_billing_apisunat_customer_id_type" class="regular-text"></td>
                 </tr>
                 <tr>
+                    <th><?= esc_html__('Valor SIN DOC.', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_sin]" value="<?= esc_attr($mapping['doc_sin'] ?? '-') ?>" placeholder="-" class="small-text"></td>
+                </tr>
+                <tr>
                     <th><?= esc_html__('Valor DNI', 'apisunatv2') ?></th>
                     <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_dni]" value="<?= esc_attr($mapping['doc_dni'] ?? '1') ?>" placeholder="1" class="small-text"></td>
                 </tr>
@@ -844,12 +1077,44 @@ class SettingsPage {
                     <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_ruc]" value="<?= esc_attr($mapping['doc_ruc'] ?? '6') ?>" placeholder="6" class="small-text"></td>
                 </tr>
                 <tr>
+                    <th><?= esc_html__('Valor CPP - Carné Temporal de Permanencia', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_cpp]" value="<?= esc_attr($mapping['doc_cpp'] ?? 'H') ?>" placeholder="H" class="small-text"></td>
+                </tr>
+                <tr>
                     <th><?= esc_html__('Valor PASAPORTE', 'apisunatv2') ?></th>
                     <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_pasaporte]" value="<?= esc_attr($mapping['doc_pasaporte'] ?? '7') ?>" placeholder="7" class="small-text"></td>
                 </tr>
                 <tr>
-                    <th><?= esc_html__('Valor OTROS', 'apisunatv2') ?></th>
+                    <th><?= esc_html__('Valor C. EXTRANJERÍA', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_carnet_ext]" value="<?= esc_attr($mapping['doc_carnet_ext'] ?? '4') ?>" placeholder="4" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor TAM - Tarjeta Andina de Migración', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_tam]" value="<?= esc_attr($mapping['doc_tam'] ?? 'E') ?>" placeholder="E" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor C. DIPLOMÁTICA', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_cedula_dip]" value="<?= esc_attr($mapping['doc_cedula_dip'] ?? 'A') ?>" placeholder="A" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor SALVOCONDUCTO', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_salvoconducto]" value="<?= esc_attr($mapping['doc_salvoconducto'] ?? 'G') ?>" placeholder="G" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor TIN - Tax Identification Number', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_tin]" value="<?= esc_attr($mapping['doc_tin'] ?? 'C') ?>" placeholder="C" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor IN - Identification Number', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_in]" value="<?= esc_attr($mapping['doc_in'] ?? 'D') ?>" placeholder="D" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor ID. PERS. NAT.', 'apisunatv2') ?></th>
                     <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_otros]" value="<?= esc_attr($mapping['doc_otros'] ?? 'B') ?>" placeholder="B" class="small-text"></td>
+                </tr>
+                <tr>
+                    <th><?= esc_html__('Valor DOC. TRIB.', 'apisunatv2') ?></th>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[doc_trib]" value="<?= esc_attr($mapping['doc_trib'] ?? '0') ?>" placeholder="0" class="small-text"></td>
                 </tr>
                 <tr>
                     <th><?= esc_html__('Key N° Doc.', 'apisunatv2') ?></th>
@@ -885,7 +1150,7 @@ class SettingsPage {
                     echo '<p class="description">' . esc_html__('Usa el botón "Verificar" junto a cada sucursal para probar la conexión.', 'apisunatv2') . '</p>';
                 },
                 'fields' => [
-                    ['key' => 'api.meta_key', 'label' => __('Meta key de sucursal', 'apisunatv2'), 'type' => 'text', 'placeholder' => '_sucursal_label'],
+                    ['key' => 'api.branch_meta_key', 'label' => __('Meta key de sucursal', 'apisunatv2'), 'type' => 'text', 'placeholder' => '_billing_apisunat_sucursal'],
                     ['key' => 'api.branches', 'label' => __('Sucursales', 'apisunatv2'), 'type' => 'branches'],
                 ],
             ],
@@ -913,11 +1178,24 @@ class SettingsPage {
                         'default' => 'wc-completed',
                     ],
                     ['key' => 'emision.boleta_sin_info_cliente', 'label' => __('Si no hay información del cliente crear una boleta simple', 'apisunatv2'), 'type' => 'checkbox'],
+                    ['key' => 'impuestos.afectacion_default', 'label' => __('Tipo de tributo por defecto', 'apisunatv2'), 'type' => 'select', 'options' => ['gravado18' => __('Gravado 18%', 'apisunatv2'), 'gravado10' => __('Gravado 10%', 'apisunatv2'), 'gravado105' => __('Gravado 10.5%', 'apisunatv2'), 'exonerado' => __('Exonerado', 'apisunatv2'), 'inafecto' => __('Inafecto', 'apisunatv2')], 'default' => 'gravado18'],
                 ],
             ],
             [
-                'id'    => 'apisunat_impuestos',
-                'title' => __('Impuestos', 'apisunatv2'),
+                'id'    => 'apisunat_detraccion',
+                'title' => __('Detracción', 'apisunatv2'),
+                'fields' => [
+                    ['key' => 'detraccion.enabled',           'label' => __('Aplicar automáticamente', 'apisunatv2'), 'type' => 'checkbox'],
+                    ['key' => 'detraccion.tipo_de_detraccion',      'label' => __('Tipo de detracción', 'apisunatv2'),          'type' => 'tipo_detraccion_select', 'options' => Catalogs::tipoDeDetraccionOptions()],
+                    ['key' => 'detraccion.porcentaje',    'label' => __('Porcentaje %', 'apisunatv2'),             'type' => 'number', 'default' => 12, 'min' => 0, 'max' => 100],
+                    ['key' => 'detraccion.medio_de_pago',      'label' => __('Medio de pago', 'apisunatv2'),          'type' => 'select', 'options' => Catalogs::mediosDePago()],
+                    ['key' => 'detraccion.cuenta_bancaria',   'label' => __('Cuenta Bancaria', 'apisunatv2'),        'type' => 'text', 'placeholder' => '00-000-000000'],
+                    ['key' => 'detraccion.tipo_de_cambio',   'label' => __('Tipo de cambio', 'apisunatv2'), 'type' => 'text', 'placeholder' => 'USD=3.5,EUR=4.0,COP=0.7'],
+                ],
+            ],
+            [
+                'id'    => 'apisunat_avanzado',
+                'title' => __('Avanzado', 'apisunatv2'),
                 'desc'  => function (): void {
                     echo '<p class="description">';
                     echo esc_html__('La afectación SUNAT se determina por la clase de impuesto asignada al producto en WooCommerce.', 'apisunatv2');
@@ -940,29 +1218,12 @@ class SettingsPage {
                     }
                 },
                 'fields' => [
-                    ['key' => 'impuestos.tipo_tributo', 'label' => __('Tipo de tributo por defecto', 'apisunatv2'), 'type' => 'select', 'options' => ['gravado10' => __('Gravado 10%', 'apisunatv2'), 'gravado105' => __('Gravado 10.5%', 'apisunatv2'), 'gravado18' => __('Gravado 18%', 'apisunatv2'), 'exonerado' => __('Exonerado', 'apisunatv2'), 'inafecto' => __('Inafecto', 'apisunatv2')], 'default' => 'gravado18'],
-                    ['key' => 'tax_manager', 'label' => __('Gestor de Impuestos', 'apisunatv2'), 'type' => 'tax_manager'],
-                ],
-            ],
-            [
-                'id'    => 'apisunat_detraccion',
-                'title' => __('Detracción', 'apisunatv2'),
-                'fields' => [
-                    ['key' => 'detraccion.enabled',           'label' => __('Aplicar automáticamente', 'apisunatv2'), 'type' => 'checkbox'],
-                    ['key' => 'detraccion.tipo_de_detraccion',      'label' => __('Tipo de detracción', 'apisunatv2'),          'type' => 'tipo_detraccion_select', 'options' => Catalogs::tipoDeDetraccionOptions()],
-                    ['key' => 'detraccion.porcentaje',    'label' => __('Porcentaje %', 'apisunatv2'),             'type' => 'number', 'default' => 12, 'min' => 0, 'max' => 100],
-                    ['key' => 'detraccion.medio_de_pago',      'label' => __('Medio de pago', 'apisunatv2'),          'type' => 'select', 'options' => Catalogs::mediosDePago()],
-                    ['key' => 'detraccion.cuenta_bancaria',   'label' => __('Cuenta Bancaria', 'apisunatv2'),        'type' => 'text', 'placeholder' => '00-000-000000'],
-                    ['key' => 'detraccion.tipo_de_cambio',   'label' => __('Tipo de cambio', 'apisunatv2'), 'type' => 'text', 'placeholder' => 'USD=3.5,EUR=4.0,COP=0.7'],
-                ],
-            ],
-            [
-                'id'    => 'apisunat_avanzado',
-                'title' => __('Avanzado', 'apisunatv2'),
-                'fields' => [
                     ['key' => 'advanced.debug',            'label' => __('Debug', 'apisunatv2'),                  'type' => 'checkbox'],
+                    ['key' => 'tax_manager', 'label' => __('Gestor de Impuestos', 'apisunatv2'), 'type' => 'tax_manager'],
                     ['key' => 'advanced.custom_checkout',  'label' => __('Checkout personalizado', 'apisunatv2'),  'type' => 'checkbox'],
                     ['key' => 'advanced.checkout_mapping', 'label' => '',                                          'type' => 'checkout_mapping'],
+                    ['key' => 'advanced.multitienda',      'label' => __('Multitienda', 'apisunatv2'),             'type' => 'checkbox'],
+                    ['key' => 'advanced.store_meta_key',   'label' => __('Meta key de tienda', 'apisunatv2'),      'type' => 'text', 'placeholder' => '_billing_apisunat_store'],
                 ],
             ],
         ];
