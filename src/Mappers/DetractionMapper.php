@@ -3,14 +3,14 @@ namespace Atm\Apisunatwp\Mappers;
 
 use Atm\Apisunatwp\Config\Options;
 
-class DetraccionMapper {
+class DetractionMapper {
 
     public const MONTO_MINIMO_SOLES = 700;
 
     public static function resolve(?\WC_Order $order, float $total): ?array {
-        $enabled = Options::getValue('detraccion.enabled', false);
-        $codigo = Options::getValue('detraccion.medio_de_pago', '001');
-        $percentage = (float) Options::getValue('detraccion.porcentaje', 12);
+        $enabled = Options::getValue('detraction.enabled', false);
+        $codigo = Options::getValue('detraction.payment_method', '001');
+        $percentage = (float) Options::getValue('detraction.percentage', 12);
 
         if (!$enabled) {
             return null;
@@ -24,7 +24,7 @@ class DetraccionMapper {
                 return null;
             }
         } else {
-            $tipoCambioStr = (string) Options::getValue('detraccion.tipo_de_cambio', '');
+            $tipoCambioStr = (string) Options::getValue('detraction.exchange_rate', '');
             $rate = null;
             if ($tipoCambioStr) {
                 foreach (explode(',', $tipoCambioStr) as $pair) {
@@ -41,8 +41,8 @@ class DetraccionMapper {
             }
         }
 
-        $manualCodigo = $order ? (string) $order->get_meta('_billing_apisunat_detraccion_medio_de_pago') : '';
-        $manualPct = $order ? (string) $order->get_meta('_billing_apisunat_detraccion_porcentaje') : '';
+        $manualCodigo = $order ? (string) $order->get_meta('_billing_apisunat_detraction_payment_method') : '';
+        $manualPct = $order ? (string) $order->get_meta('_billing_apisunat_detraction_percentage') : '';
 
         if ($order && !empty($manualCodigo)) {
             $codigo = $manualCodigo;
@@ -55,9 +55,9 @@ class DetraccionMapper {
 
         return [
             'codigo'       => $codigo,
-            'porcentaje'   => $percentage,
+            'percentage'   => $percentage,
             'monto'        => round($amount, 2),
-            'cuenta_banco' => (string) Options::getValue('detraccion.cuenta_bancaria', ''),
+            'cuenta_banco' => (string) Options::getValue('detraction.bank_account', ''),
         ];
     }
 }

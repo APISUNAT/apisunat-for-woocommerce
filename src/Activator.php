@@ -12,6 +12,7 @@ class Activator {
         if (!get_option(Options::OPTION_KEY)) {
             update_option(Options::OPTION_KEY, Defaults::get(), false);
         }
+        Options::migrateBranches();
         self::ensureIndex();
         self::ensureTaxClasses();
     }

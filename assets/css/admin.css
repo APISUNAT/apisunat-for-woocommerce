@@ -40,7 +40,7 @@
 }
 
 /* ===== Settings page ===== */
-.apisunatv2-settings .nav-tab-wrapper {
+.apisunat .nav-tab-wrapper {
     margin-top: 15px;
     border-bottom: 1px solid #ccc;
 }
@@ -131,6 +131,56 @@
 }
 .apisunatv2-logs .apisunat-log-path {
     margin-top: 10px;
+}
+
+/* ===== Toggle switch (style-e) ===== */
+.apisunatv2-settings .checkbox.style-e {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    top: -10px;
+}
+.apisunatv2-settings .checkbox.style-e input {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    height: 0;
+    width: 0;
+}
+.apisunatv2-settings .checkbox.style-e input:checked ~ .checkbox__checkmark {
+    background-color: #2271b1;
+}
+.apisunatv2-settings .checkbox.style-e input:checked ~ .checkbox__checkmark:after {
+    left: 21px;
+}
+.apisunatv2-settings .checkbox.style-e:hover input ~ .checkbox__checkmark {
+    background-color: #ccc;
+}
+.apisunatv2-settings .checkbox.style-e:hover input:checked ~ .checkbox__checkmark {
+    background-color: #2271b1;
+}
+.apisunatv2-settings .checkbox.style-e .checkbox__checkmark {
+    position: absolute;
+    top: 1px;
+    left: 0;
+    height: 22px;
+    width: 40px;
+    background-color: #ccc;
+    transition: background-color 0.25s ease;
+    border-radius: 11px;
+}
+.apisunatv2-settings .checkbox.style-e .checkbox__checkmark:after {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    width: 16px;
+    height: 16px;
+    display: block;
+    background-color: #fff;
+    border-radius: 50%;
+    transition: left 0.25s ease;
 }
 
 /* ===== Order meta box ===== */

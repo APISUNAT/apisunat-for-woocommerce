@@ -9,7 +9,7 @@ class Logger implements LoggerInterface {
     private const REDACTED = '***REDACTED***';
     private const MAX_VALUE_LEN = 500;
     private const SENSITIVE_KEYS = [
-        'persona_token', 'personatoken', 'persona_id', 'personaid',
+        'personaToken', 'personatoken', 'personaId', 'personaid',
         'authorization', 'x-persona-id', 'x-persona-token',
         'token', 'password', 'secret', 'api_key', 'apikey',
     ];
@@ -41,7 +41,7 @@ class Logger implements LoggerInterface {
     }
 
     public function debug(string $message, array $context = []): void {
-        if (!Options::getValue('advanced.debug')) {
+        if (!Options::getValue('settings.debug')) {
             return;
         }
         $this->log('DEBUG', $message, $context);

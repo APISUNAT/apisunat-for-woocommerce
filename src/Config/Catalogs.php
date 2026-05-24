@@ -31,7 +31,7 @@ class Catalogs {
         ];
     }
 
-    public static function tiposDeDetraccion(): array {
+    public static function tiposDeDetraction(): array {
         return [
             '' => ['label' => __('Seleccionar...', 'apisunatv2'), 'percent' => null],
             '001' => ['label' => __('Azúcar y melaza de caña', 'apisunatv2'), 'percent' => 10],
@@ -76,9 +76,9 @@ class Catalogs {
         ];
     }
 
-    public static function tipoDeDetraccionOptions(): array {
+    public static function tipoDeDetractionOptions(): array {
         $options = [];
-        foreach (self::tiposDeDetraccion() as $k => $v) {
+        foreach (self::tiposDeDetraction() as $k => $v) {
             $options[$k] = $v['label'];
         }
         return $options;

@@ -16,7 +16,7 @@
 
 defined('ABSPATH') || exit;
 
-define('APISUNATWP_VERSION', '2.0.0');
+define('APISUNATWP_VERSION', '2.0.1');
 
 if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')), true)) {
     add_action('admin_notices', function () {

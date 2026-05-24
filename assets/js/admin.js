@@ -29,9 +29,9 @@
             action: 'apisunat_emit_cpe',
             order_id: orderId,
             nonce: nonce,
-            _billing_apisunat_detraccion_enabled: $('#_billing_apisunat_detraccion_enabled').is(':checked') ? '1' : '0',
-            _billing_apisunat_detraccion_medio_de_pago: $('#_billing_apisunat_detraccion_medio_de_pago').val() || '',
-            _billing_apisunat_detraccion_porcentaje: $('#_billing_apisunat_detraccion_porcentaje').val() || ''
+            _billing_apisunat_detraction_enabled: $('#_billing_apisunat_detraction_enabled').is(':checked') ? '1' : '0',
+            _billing_apisunat_detraction_payment_method: $('#_billing_apisunat_detraction_payment_method').val() || '',
+            _billing_apisunat_detraction_percentage: $('#_billing_apisunat_detraction_percentage').val() || ''
         };
 
         postAction(payload)

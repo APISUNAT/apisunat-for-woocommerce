@@ -125,6 +125,20 @@ class CheckoutHooks {
         if ($updated) {
             $order->save();
         }
+
+        self::saveMappingSnapshots($order);
+    }
+
+    private static function saveMappingSnapshots(\WC_Order $order): void {
+        $checkoutMapping = Options::getValue('settings.checkout_mapping', []);
+        $taxRateMapping  = Options::getValue('settings.tax_rate_mapping', []);
+
+        if (!empty($checkoutMapping)) {
+            $order->update_meta_data('_billing_apisunat_snapshop_checkout_mapping', $checkoutMapping);
+        }
+        if (!empty($taxRateMapping)) {
+            $order->update_meta_data('_billing_apisunat_snapshop_tax_rate_mapping', $taxRateMapping);
+        }
     }
 
     private static function registerClassicCheckout(): void {
@@ -247,6 +261,8 @@ class CheckoutHooks {
                 $order->update_meta_data($field, sanitize_text_field(wp_unslash($_POST[$field])));
             }
         }
+
+        self::saveMappingSnapshots($order);
     }
 
     public static function ajaxConsultDocument(): void {

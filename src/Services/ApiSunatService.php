@@ -8,11 +8,10 @@ use Atm\Apisunatwp\Exceptions\InvalidOrderException;
 use Atm\Apisunatwp\Exceptions\MissingCredentialsException;
 use Atm\Apisunatwp\Logging\Logger;
 use Atm\Apisunatwp\Mappers\OrderMapper;
-use Atm\Apisunatwp\Mappers\TaxMapper;
 
 class ApiSunatService {
 
-    public const API_URL  = 'https://ecommerces-api.apisunat.com/v1.2/woocommerce';
+    public const API_URL  = 'https://ecommerces-api.apisunat.com/woocommerce/v2';
     public const BASE_URL = 'https://back.apisunat.com';
 
     private const POST_TIMEOUT = 45;
@@ -80,7 +79,7 @@ class ApiSunatService {
             }
 
             $branch = Options::resolveBranch($order);
-            if (empty($branch['persona_id']) || empty($branch['persona_token'])) {
+            if (empty($branch['personaId']) || empty($branch['personaToken'])) {
                 throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
             }
 
@@ -92,13 +91,13 @@ class ApiSunatService {
 
             $payload  = self::buildPayload($order);
 
-            if (Options::getValue('advanced.debug')) {
+            if (Options::getValue('settings.debug')) {
                 self::logger()->debug('CPE Payload', ['order_id' => $order_id, 'payload' => $payload]);
             }
 
             $response = self::request('POST', self::API_URL, $payload);
 
-            if (Options::getValue('advanced.debug')) {
+            if (Options::getValue('settings.debug')) {
                 self::logger()->debug('CPE Response', ['order_id' => $order_id, 'response' => $response]);
             }
 
@@ -132,7 +131,7 @@ class ApiSunatService {
         self::logger()->info('Voiding CPE', ['order_id' => $order_id, 'doc_id' => $docId]);
 
         $branch = Options::resolveBranch($order);
-        if (empty($branch['persona_id']) || empty($branch['persona_token'])) {
+        if (empty($branch['personaId']) || empty($branch['personaToken'])) {
             throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
         }
 
@@ -143,13 +142,13 @@ class ApiSunatService {
             'customer_email' => $order->get_billing_email(),
         ];
 
-        if (Options::getValue('advanced.debug')) {
+        if (Options::getValue('settings.debug')) {
             self::logger()->debug('Void Payload', ['order_id' => $order_id, 'doc_id' => $docId, 'payload' => $payload]);
         }
 
         $response = self::request('POST', self::API_URL . '/' . rawurlencode($docId), $payload);
 
-        if (Options::getValue('advanced.debug')) {
+        if (Options::getValue('settings.debug')) {
             self::logger()->debug('Void Response', ['order_id' => $order_id, 'doc_id' => $docId, 'response' => $response]);
         }
 
@@ -218,26 +217,41 @@ class ApiSunatService {
     }
 
     private static function buildPayload(\WC_Order $order): array {
-        $mapped = OrderMapper::map($order);
+        //$mapped = OrderMapper::map($order);
 
-        $tax_classes = self::getTaxClassesMap();
+        //$tax_classes = self::getTaxClassesMap();
         $items_data = [];
-        foreach ($order->get_items() as $item) {
+        /*foreach ($order->get_items() as $item) {
             $product = $item instanceof \WC_Order_Item_Product ? $item->get_product() : null;
-            $tax_class = $product ? $product->get_tax_class() : '';
+            //$tax_class = $product ? $product->get_tax_class() : '';
             $items_data[] = [
                 'item'          => $item->get_data(),
                 'product'       => $product ? $product->get_data() : [],
-                'tax_class'     => $tax_class,
-                'tax_class_slug' => sanitize_title($tax_class),
-                'tax_info'      => $tax_classes[$tax_class] ?? $tax_classes[''] ?? null,
-                'taxes'         => $item->get_taxes(),
+            ];
+        }*/
+
+        foreach ($order->get_items('line_item') as $item) {
+            $product = $item instanceof \WC_Order_Item_Product
+                ? $item->get_product()
+                : null;
+
+            $items_data[] = [
+                'type'    => 'product',
+                'item'    => $item->get_data(),
+                'product' => $product ? $product->get_data() : [],
+            ];
+        }
+
+        foreach ($order->get_items('shipping') as $shipping_item) {
+            $items_data[] = [
+                'type' => 'shipping',
+                'item' => $shipping_item->get_data(),
             ];
         }
 
         $order_data = $order->get_data();
 
-        $excluded_meta = [
+        /*$excluded_meta = [
             '_apisunat_request',
             '_apisunat_response',
             '_apisunat_response_code',
@@ -249,7 +263,7 @@ class ApiSunatService {
                 $key = $meta->key ?? ($meta['key'] ?? '');
                 return !in_array($key, $excluded_meta, true);
             }
-        ));
+        ));*/
 
         return [
             'plugin_data' => self::pluginConfig(),
@@ -299,14 +313,51 @@ class ApiSunatService {
     }
 
     private static function pluginConfig(): array {
-        $config = Options::get();
-        if (!empty($config['advanced']['multitienda'])) {
-            return ['stores' => $config['stores'] ?? []];
+        $config   = Options::get();
+        $settings = $config['settings'] ?? [];
+        $branches = $config['branches'] ?? [];
+
+        if (isset($settings['tax_rate_mapping']) && is_array($settings['tax_rate_mapping'])) {
+            $settings['tax_rate_mapping'] = self::enrichTaxRateMapping($settings['tax_rate_mapping']);
         }
-        return $config;
+
+        if (empty($settings['multi_branch'])) {
+            $firstBranch = $branches[0] ?? [];
+            $firstBranch['api']        = ($firstBranch['api'] ?? []) + ($config['api'] ?? []);
+            $firstBranch['issue']      = ($firstBranch['issue'] ?? []) + ($config['issue'] ?? []);
+            $firstBranch['detraction'] = ($firstBranch['detraction'] ?? []) + ($config['detraction'] ?? []);
+            $branches = [$firstBranch];
+        }
+
+        return [
+            //'api'        => !empty($settings['multi_branch']) ? ($config['api'] ?? []) : [],
+            //'issue'      => !empty($settings['multi_branch']) ? ($config['issue'] ?? []) : [],
+            //'detraction' => !empty($settings['multi_branch']) ? ($config['detraction'] ?? []) : [],
+            'branches'   => $branches,
+            'settings'   => $settings,
+        ];
     }
 
-    private static function getWcTaxRate(): string {
+    private static function enrichTaxRateMapping(array $mapping): array {
+        $rateInfo = [];
+        $classes = array_merge(['standard'], \WC_Tax::get_tax_class_slugs());
+        foreach ($classes as $class) {
+            $rates = \WC_Tax::get_rates_for_tax_class($class);
+            foreach ($rates as $rate) {
+                $rateInfo[$rate->tax_rate_id] = $class === 'standard' ? 'standard' : $class;
+            }
+        }
+
+        return array_combine(
+            array_map(static function ($rateId) use ($rateInfo): string {
+                $clase = $rateInfo[$rateId] ?? '';
+                return $clase . ',' . $rateId;
+            }, array_keys($mapping)),
+            array_values($mapping)
+        );
+    }
+
+    /*private static function getWcTaxRate(): string {
         $rates = \WC_Tax::get_rates_for_tax_class('standard');
         if (!empty($rates) && is_array($rates)) {
             $rate = reset($rates);
@@ -315,37 +366,38 @@ class ApiSunatService {
             }
         }
         return '18';
-    }
+    }*/
 
     private static function getRawTaxData(\WC_Order $order): array {
         $tax_data = [
-            'order_taxes'  => $order->get_taxes(),
+            //'order_taxes'  => $order->get_taxes(),
             'tax_totals'   => $order->get_tax_totals(),
-            'tax_lines'    => [],
-            'tax_classes'  => \WC_Tax::get_tax_classes(),
+            //'tax_lines'    => [],
+            //'tax_classes'  => \WC_Tax::get_tax_classes(),
             'all_rates'    => [],
         ];
 
-        foreach ($tax_data['tax_classes'] as $class) {
-            $slug = sanitize_title($class);
-            $rates = \WC_Tax::get_rates_for_tax_class($slug);
-            if (!empty($rates)) {
-                $tax_data['all_rates'][$slug] = array_map(function ($rate) {
-                    return [
-                        'rate'    => (string) $rate->tax_rate,
-                        'label'   => $rate->tax_rate_name,
-                        'shipping'=> $rate->tax_rate_shipping ? 'yes' : 'no',
-                        'compound'=> $rate->tax_rate_compound ? 'yes' : 'no',
-                    ];
-                }, $rates);
-            }
+        $classes = array_merge(
+            [''],
+            \WC_Tax::get_tax_classes()
+        );
+
+        foreach ($classes as $class) {
+            $rates = \WC_Tax::get_rates_for_tax_class($class);
+
+            $key = $class ?: 'standard';
+
+            $tax_data['all_rates'][$key] = array_map(
+                fn($rate) => (array) $rate,
+                $rates
+            );
         }
 
-        foreach ($order->get_items('tax') as $tax_item) {
+        /*foreach ($order->get_items('tax') as $tax_item) {
             $tax_data['tax_lines'][] = $tax_item->get_data();
-        }
+        }*/
 
-        foreach ($order->get_items() as $item) {
+        /*foreach ($order->get_items() as $item) {
             $tax_data['item_taxes'][] = [
                 'item_id'    => $item->get_id(),
                 'name'       => $item->get_name(),
@@ -353,7 +405,7 @@ class ApiSunatService {
                 'tax_status' => $item->get_tax_status(),
                 'taxes'      => $item->get_taxes(),
             ];
-        }
+        }*/
 
         return $tax_data;
     }
@@ -370,7 +422,7 @@ class ApiSunatService {
             return true;
         }
 
-        if (Options::getValue('emision.boleta_sin_info_cliente', false)) {
+        if (Options::getValue('issue.no_customer_data', false)) {
             return true;
         }
 
@@ -396,7 +448,7 @@ class ApiSunatService {
 
         $response = wp_remote_request($url, $args);
 
-        if (function_exists('wc_get_order') && isset($body['order']['id'])) {
+        /*if (function_exists('wc_get_order') && isset($body['order']['id'])) {
             $order_id = $body['order']['id'];
             $order = wc_get_order($order_id);
             if ($order) {
@@ -415,7 +467,7 @@ class ApiSunatService {
                 }
                 $order->save();
             }
-        }
+        }*/
 
         if (is_wp_error($response)) {
             self::logger()->error('WP HTTP error', ['error' => $response->get_error_message()]);

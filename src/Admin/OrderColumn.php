@@ -69,7 +69,7 @@ class OrderColumn {
     }
 
     private static function emitBtn(int $order_id, string $status): void {
-        $estado_config = \Atm\Apisunatwp\Config\Options::getValue('emision.estado_emision', 'wc-completed');
+        $estado_config = \Atm\Apisunatwp\Config\Options::getValue('issue.trigger_status', 'wc-completed');
         $estado_actual = 'wc-' . $status;
         $disabled = $estado_actual === $estado_config ? '' : 'disabled';
         printf(

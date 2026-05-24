@@ -18,7 +18,7 @@ class AdminAssets {
             $screen->id === 'woocommerce_page_wc-orders' ||
             (isset($screen->post_type) && $screen->post_type === 'shop_order' && $screen->base === 'post')
         );
-        $is_settings = $hook === 'woocommerce_page_apisunatv2-settings';
+        $is_settings = $hook === 'woocommerce_page_apisunat';
         $is_logs     = $hook === 'woocommerce_page_apisunatv2-logs';
 
         if (!$is_order && !$is_settings && !$is_logs) {

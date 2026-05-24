@@ -21,11 +21,11 @@ class OrderHooks {
             return;
         }
 
-        if (Options::getValue('emision.modo', 'manual') !== 'automatico') {
+        if (Options::getValue('issue.mode', 'manual') !== 'automatico') {
             return;
         }
 
-        $estado_config = Options::getValue('emision.estado_emision', 'wc-completed');
+        $estado_config = Options::getValue('issue.trigger_status', 'wc-completed');
         $estado_actual = 'wc-' . $order->get_status();
         if ($estado_actual !== $estado_config) {
             return;

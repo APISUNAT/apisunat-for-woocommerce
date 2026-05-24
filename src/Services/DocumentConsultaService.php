@@ -53,7 +53,7 @@ class DocumentConsultaService {
 
     private static function fetch(string $path): ?array {
         $branch = Options::resolveBranch();
-        $token  = $branch['persona_token'];
+        $token  = $branch['personaToken'];
         if (!$token) {
             return null;
         }

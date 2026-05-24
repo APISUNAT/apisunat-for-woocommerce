@@ -14,14 +14,14 @@
         var $statAccepted = $('#stat-accepted');
         var $statApi = $('#stat-api');
 
-        // Test API per branch
-        $(document).on('click', '.apisunat-test-branch', function (e) {
+        // Test API
+        $(document).on('click', '.apisunat-test-api', function (e) {
             e.preventDefault();
             var $btn = $(this);
-            var $row = $btn.closest('.branch-row');
-            var personaId = $row.find('input[name*="[persona_id]"]').val();
-            var token = $row.find('input[name*="[persona_token]"]').val();
-            var $result = $row.find('.apisunat-branch-result');
+            var $creds = $btn.closest('.apisunat-credentials');
+            var personaId = $creds.find('input[name*="[personaId]"]').val();
+            var token = $creds.find('input[name*="[personaToken]"]').val();
+            var $result = $creds.find('.apisunat-api-result');
 
             if (!personaId || !token) {
                 $result.removeClass('success error').addClass('error').text(i18n.credsMissing || '');
@@ -34,8 +34,8 @@
             $.post(ajaxUrl, {
                 action: 'apisunat_test_api',
                 nonce: nonce,
-                persona_id: personaId,
-                persona_token: token
+                personaId: personaId,
+                personaToken: token
             }).done(function (res) {
                 if (res && res.success) {
                     var msg = res.data.message + ' - ' + (res.data.persona || '');
@@ -164,10 +164,23 @@
 
         $(document).on('click', '.apisunat-toggle-token', function (e) {
             e.preventDefault();
-            var $input = $(this).closest('.branch-row').find('.apisunat-token-input');
+            var $input = $(this).siblings('.apisunat-token-input');
+            if (!$input.length) {
+                $input = $(this).closest('.apisunat-credentials').find('.apisunat-token-input');
+            }
             if (!$input.length) return;
             $input.attr('type', $input.attr('type') === 'password' ? 'text' : 'password');
         });
+
+        // Toggle multi_branch_key visibility based on multi_branch checkbox
+        var $multiBranchCb = $('#apisunatv2-settings-multi_branch');
+        var $multiBranchKeyRow = $('label[for="apisunatv2-settings-multi_branch_key"]').closest('tr');
+        if ($multiBranchCb.length && $multiBranchKeyRow.length) {
+            $multiBranchKeyRow.toggle($multiBranchCb.is(':checked'));
+            $multiBranchCb.on('change', function () {
+                $multiBranchKeyRow.toggle(this.checked);
+            });
+        }
 
         fetchStats(false);
     });
