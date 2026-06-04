@@ -101,30 +101,53 @@
         var observer;
         var bound = false;
 
-        function getFieldElement(fieldId) {
-            return (
-                document.querySelector('[name="' + fieldId + '"]') ||
-                document.querySelector('[data-key="' + fieldId + '"] input, [data-key="' + fieldId + '"] select')
-            );
+        var FIELD_IDS = {
+            docType: 'apisunat/sunat_id_type',
+            docNum:  'apisunat/sunat_id_number',
+        };
+
+        function findElement(nameOrId) {
+            // Try by name, data-key, and id attributes
+            var el =
+                document.querySelector('[name="' + nameOrId + '"]') ||
+                document.querySelector('[name="order[additional][' + nameOrId + ']"]') ||
+                document.querySelector('[data-key="' + nameOrId + '"] input, [data-key="' + nameOrId + '"] select') ||
+                document.getElementById('order-' + nameOrId.replace(/\//g, '-'));
+            return el;
         }
 
         function getFieldValue(fieldId) {
-            var el = getFieldElement(fieldId);
+            var el = findElement(fieldId);
             return el ? el.value : null;
         }
 
-        function setFieldValue(fieldId, value) {
-            var el = getFieldElement(fieldId);
-            if (el) {
+        function setNativeValue(el, value) {
+            var proto = el instanceof HTMLSelectElement
+                ? window.HTMLSelectElement.prototype
+                : window.HTMLInputElement.prototype;
+            var setter = Object.getOwnPropertyDescriptor(proto, 'value');
+            if (setter && setter.set) {
+                setter.set.call(el, value);
+            } else {
                 el.value = value;
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        function setFieldValue(fieldId, value) {
+            var el = findElement(fieldId);
+            if (!el) {
+                var mapped = fieldId.replace('billing_', '');
+                el = findElement(mapped);
+            }
+            if (el) {
+                setNativeValue(el, value);
             }
         }
 
         function consultHandler() {
-            var type = getFieldValue('apisunat-sunat_id_type');
-            var num = getFieldValue('apisunat-sunat_id_number');
+            var type = getFieldValue(FIELD_IDS.docType);
+            var num = getFieldValue(FIELD_IDS.docNum);
             if (!type || !num) return;
             clearTimeout(debounce);
             debounce = setTimeout(function () {
@@ -147,8 +170,8 @@
 
         function tryBind() {
             if (bound) return true;
-            var docTypeEl = getFieldElement('apisunat-sunat_id_type');
-            var docNumEl = getFieldElement('apisunat-sunat_id_number');
+            var docTypeEl = findElement(FIELD_IDS.docType);
+            var docNumEl = findElement(FIELD_IDS.docNum);
             if (docTypeEl && docNumEl) {
                 docTypeEl.addEventListener('change', consultHandler);
                 docNumEl.addEventListener('input', consultHandler);
