@@ -11,7 +11,6 @@ class OrderHooks {
         foreach ($estados as $estado) {
             add_action('woocommerce_order_status_' . $estado, [self::class, 'handle']);
         }
-        SendOrderJob::register();
     }
 
     public static function handle(int|string $order_id): void {

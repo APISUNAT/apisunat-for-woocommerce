@@ -57,6 +57,10 @@ class OrderMetaBox {
         $percentage      = (string) ($order->get_meta('_billing_apisunat_detraction_percentage') ?: Options::getValue('detraction.percentage', 12));
         $payment_method   = (string) ($order->get_meta('_billing_apisunat_detraction_payment_method') ?: Options::getValue('detraction.payment_method', '001'));
         $cuenta_banco    = (string) ($order->get_meta('_billing_apisunat_detraction_cuenta_banco') ?: Options::getValue('detraction.bank_account', ''));
+        $monto_total     = $order->get_meta('_billing_apisunat_detraction_monto_total');
+        $order_total     = (float) $order->get_total();
+        $monto_default   = $order_total > 0 && $percentage > 0 ? round($order_total * (float) $percentage / 100, 2) : 0;
+        $monto_total     = $monto_total !== '' ? (string) $monto_total : (string) $monto_default;
 
         $tipos_de_detraction = Catalogs::tiposDeDetraction();
         $medios_de_pago      = Catalogs::mediosDePago();
@@ -92,6 +96,10 @@ class OrderMetaBox {
                 <label for="_billing_apisunat_detraction_cuenta_banco"><?= esc_html__('Cuenta bancaria', 'apisunatv2') ?></label>
                 <input type="text" id="_billing_apisunat_detraction_cuenta_banco" name="_billing_apisunat_detraction_cuenta_banco" value="<?= esc_attr($cuenta_banco) ?>" placeholder="<?= esc_attr__('00-000-000000', 'apisunatv2') ?>">
             </p>
+            <p class="form-field form-field-wide">
+                <label for="_billing_apisunat_detraction_monto_total"><?= esc_html__('Monto total', 'apisunatv2') ?></label>
+                <input type="number" id="_billing_apisunat_detraction_monto_total" name="_billing_apisunat_detraction_monto_total" value="<?= esc_attr($monto_total) ?>" step="0.01" min="0">
+            </p>
         </div>
         <script>
         (function() {
@@ -104,11 +112,22 @@ class OrderMetaBox {
             }
             var tipo = document.getElementById('_billing_apisunat_detraction_tipo');
             var pct = document.getElementById('_billing_apisunat_detraction_percentage');
+            var monto = document.getElementById('_billing_apisunat_detraction_monto_total');
             if (tipo && pct) {
                 tipo.addEventListener('change', function() {
                     var opt = this.options[this.selectedIndex];
                     if (opt && opt.dataset.percent) {
                         pct.value = opt.dataset.percent;
+                        pct.dispatchEvent(new Event('change'));
+                    }
+                });
+            }
+            if (pct && monto) {
+                pct.addEventListener('change', function() {
+                    if (monto.value === '' || parseFloat(monto.value) === 0) {
+                        var total = <?= (float) $order_total ?>;
+                        var pctVal = parseFloat(this.value) || 0;
+                        monto.value = total > 0 && pctVal > 0 ? (total * pctVal / 100).toFixed(2) : '';
                     }
                 });
             }
@@ -233,6 +252,9 @@ class OrderMetaBox {
         }
         if (isset($_POST['_billing_apisunat_detraction_cuenta_banco'])) {
             $order->update_meta_data('_billing_apisunat_detraction_cuenta_banco', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraction_cuenta_banco'])));
+        }
+        if (isset($_POST['_billing_apisunat_detraction_monto_total'])) {
+            $order->update_meta_data('_billing_apisunat_detraction_monto_total', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraction_monto_total'])));
         }
 
         $order->save();

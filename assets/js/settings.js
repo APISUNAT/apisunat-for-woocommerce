@@ -85,6 +85,33 @@
             fetchStats(true);
         });
 
+        var $sendPendingBtn = $('#send-pending-btn');
+        var $sendResult = $('#send-pending-result');
+
+        $sendPendingBtn.on('click', function (e) {
+            e.preventDefault();
+            var $btn = $(this);
+            $btn.prop('disabled', true);
+            $sendResult.text(i18n.sending || '');
+
+            $.post(ajaxUrl, {
+                action: 'apisunat_send_pending',
+                nonce: nonce
+            }).done(function (res) {
+                if (res && res.success) {
+                    $sendResult.removeClass('error').addClass('success').text(res.data.message);
+                    applyStats(res.data);
+                } else {
+                    var err = (res && res.data && res.data.message) || i18n.connError || '';
+                    $sendResult.removeClass('success').addClass('error').text(err);
+                }
+            }).fail(function () {
+                $sendResult.removeClass('success').addClass('error').text(i18n.connError || '');
+            }).always(function () {
+                $btn.prop('disabled', false);
+            });
+        });
+
         // Enable taxes
         $(document).on('click', '#apisunat-enable-tax', function (e) {
             e.preventDefault();

@@ -265,8 +265,21 @@ class ApiSunatService {
             }
         ));*/
 
+        $forms = [];
+        $detractionData = [
+            'enabled'          => (string) $order->get_meta('_billing_apisunat_detraction_enabled') === '1',
+            'tipo'             => $order->get_meta('_billing_apisunat_detraction_tipo'),
+            'percentage'       => $order->get_meta('_billing_apisunat_detraction_percentage'),
+            'payment_method'   => $order->get_meta('_billing_apisunat_detraction_payment_method'),
+            'cuenta_banco'     => $order->get_meta('_billing_apisunat_detraction_cuenta_banco'),
+            'monto_total'      => $order->get_meta('_billing_apisunat_detraction_monto_total'),
+        ];
+        if ($detractionData['enabled'] || !empty($detractionData['tipo'])) {
+            $forms['detraction'] = $detractionData;
+        }
+
         return [
-            'plugin_data' => self::pluginConfig(),
+            'plugin_data' => array_merge(self::pluginConfig(), ['forms' => $forms]),
             'order_data'  => $order_data,
             'items_data'  => $items_data,
             'tax_data'    => self::getRawTaxData($order),
@@ -547,6 +560,77 @@ class ApiSunatService {
     private static function documentNumber(string $filename): string {
         $parts = explode('-', $filename);
         return ($parts[2] ?? '') . '-' . ($parts[3] ?? '');
+    }
+
+    public static function sendGRE(int $order_id, array $gre_data): array {
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            throw new InvalidOrderException("Order #{$order_id} not found");
+        }
+
+        self::logger()->info('Sending GRE', ['order_id' => $order_id]);
+
+        $branch = Options::resolveBranch($order);
+        if (empty($branch['personaId']) || empty($branch['personaToken'])) {
+            throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
+        }
+
+        $forms = ['gre' => $gre_data];
+        $detractionData = [
+            'enabled'          => (string) $order->get_meta('_billing_apisunat_detraction_enabled') === '1',
+            'tipo'             => $order->get_meta('_billing_apisunat_detraction_tipo'),
+            'percentage'       => $order->get_meta('_billing_apisunat_detraction_percentage'),
+            'payment_method'   => $order->get_meta('_billing_apisunat_detraction_payment_method'),
+            'cuenta_banco'     => $order->get_meta('_billing_apisunat_detraction_cuenta_banco'),
+            'monto_total'      => $order->get_meta('_billing_apisunat_detraction_monto_total'),
+        ];
+        if ($detractionData['enabled'] || !empty($detractionData['tipo'])) {
+            $forms['detraction'] = $detractionData;
+        }
+
+        $payload = [
+            'plugin_data' => array_merge(self::pluginConfig(), ['forms' => $forms]),
+            'order_data'  => $order->get_data(),
+            'gre_data'    => $gre_data,
+        ];
+
+        self::logger()->info('GRE Payload', ['payload' => $payload]);
+
+        $response = self::request('POST', self::API_URL, $payload);
+
+        self::logger()->info('GRE response', ['order_id' => $order_id, 'response' => $response]);
+
+        if (isset($response['status']) && $response['status'] === 'ERROR') {
+            $error = $response['error'] ?? __('Error al emitir GRE', 'apisunatv2');
+            throw new \RuntimeException(is_string($error) ? $error : __('Error al emitir GRE', 'apisunatv2'));
+        }
+
+        return $response;
+    }
+
+    public static function voidGRE(int $order_id, string $docId, string $reason): void {
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            throw new InvalidOrderException("Order #{$order_id} not found");
+        }
+
+        self::logger()->info('Voiding GRE', ['order_id' => $order_id, 'doc_id' => $docId]);
+
+        $branch = Options::resolveBranch($order);
+        if (empty($branch['personaId']) || empty($branch['personaToken'])) {
+            throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
+        }
+
+        $payload = [
+            'reason'   => $reason,
+            'plugin_data' => self::pluginConfig(),
+        ];
+
+        $response = self::request('POST', self::API_URL . '/gre/' . rawurlencode($docId) . '/void', $payload);
+
+        if (isset($response['status']) && $response['status'] === 'ERROR') {
+            throw new \RuntimeException($response['error'] ?? __('Error al anular GRE', 'apisunatv2'));
+        }
     }
 
     private static function truncate(string $value, int $max): string {

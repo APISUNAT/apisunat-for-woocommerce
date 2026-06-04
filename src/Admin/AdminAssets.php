@@ -32,6 +32,42 @@ class AdminAssets {
             APISUNATWP_VERSION
         );
 
+        if ($is_order) {
+            wp_enqueue_script(
+                'apisunatv2-gre',
+                self::$plugin_url . 'assets/js/gre-admin.js',
+                ['jquery'],
+                APISUNATWP_VERSION,
+                true
+            );
+            wp_localize_script('apisunatv2-gre', 'apisunatv2_ajax', [
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce'    => wp_create_nonce(OrderActions::NONCE_ACTION),
+                'i18n'     => [
+                    'saving'     => __('Guardando...', 'apisunatv2'),
+                    'saved'      => __('Borrador guardado', 'apisunatv2'),
+                    'emitting'   => __('Emitiendo...', 'apisunatv2'),
+                    'voiding'    => __('Anulando...', 'apisunatv2'),
+                    'error'      => __('Error', 'apisunatv2'),
+                    'confirm'    => __('Confirmar Anulación', 'apisunatv2'),
+                    'reasonShort'=> __('Motivo requiere al menos 3 caracteres', 'apisunatv2'),
+                    'loadData'   => __('Cargando datos...', 'apisunatv2'),
+                    'product'    => __('Producto', 'apisunatv2'),
+                    'quantity'   => __('Cantidad', 'apisunatv2'),
+                    'unit'       => __('Unidad', 'apisunatv2'),
+                    'remove'     => __('Quitar', 'apisunatv2'),
+                    'plate'      => __('Placa', 'apisunatv2'),
+                    'authorization' => __('N° Autorización', 'apisunatv2'),
+                    'entity'     => __('Entidad Emisora', 'apisunatv2'),
+                    'docType'    => __('Tipo Doc.', 'apisunatv2'),
+                    'docNum'     => __('N° Doc.', 'apisunatv2'),
+                    'names'      => __('Nombres', 'apisunatv2'),
+                    'lastnames'  => __('Apellidos', 'apisunatv2'),
+                    'license'    => __('Licencia', 'apisunatv2'),
+                ],
+            ]);
+        }
+
         if ($is_order || $is_settings) {
             wp_enqueue_script(
                 'apisunatv2-admin',
@@ -75,6 +111,7 @@ class AdminAssets {
                     'verifying'    => __('Verificando...', 'apisunatv2'),
                     'syncing'      => __('Sincronizando...', 'apisunatv2'),
                     'sync'         => __('Sincronizar', 'apisunatv2'),
+                    'sending'      => __('Encolando órdenes...', 'apisunatv2'),
                     'connError'    => __('Error de conexión', 'apisunatv2'),
                     'credsMissing' => __('Credenciales requeridas', 'apisunatv2'),
                 ],

@@ -3,6 +3,7 @@ namespace Atm\Apisunatwp\Admin;
 
 use Atm\Apisunatwp\Config\Catalogs;
 use Atm\Apisunatwp\Config\Options;
+use Atm\Apisunatwp\Jobs\SendOrderJob;
 use Atm\Apisunatwp\Services\ApiSunatService;
 
 class SettingsPage {
@@ -18,6 +19,7 @@ class SettingsPage {
         add_action('wp_ajax_apisunat_sync_pending', [self::class, 'ajaxSyncPending']);
         add_action('wp_ajax_apisunat_enable_tax',         [self::class, 'ajaxEnableTax']);
         add_action('wp_ajax_apisunat_create_tax_classes', [self::class, 'ajaxCreateTaxClasses']);
+        add_action('wp_ajax_apisunat_send_pending',       [self::class, 'ajaxSendPending']);
         add_action('wp_ajax_apisunat_add_tax_rate',      [self::class, 'ajaxAddTaxRate']);
         add_action('admin_post_apisunatv2_save',         [self::class, 'handleSave']);
         add_action('admin_notices',                      [self::class, 'adminNotices']);
@@ -284,6 +286,70 @@ class SettingsPage {
         ]);
     }
 
+    public static function ajaxSendPending(): void {
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Permiso denegado', 'apisunatv2')], 403);
+        }
+        check_ajax_referer(self::NONCE_ACTION, 'nonce');
+
+        if (!function_exists('as_enqueue_async_action')) {
+            wp_send_json_error(['message' => __('Action Scheduler no disponible', 'apisunatv2')]);
+        }
+
+        $enqueued = 0;
+        $skipped  = 0;
+
+        $triggerStatus = Options::getValue('issue.trigger_status', 'wc-completed');
+
+        $page = 0;
+        while ($page < 10) {
+            $orders = wc_get_orders([
+                'limit'  => self::SYNC_LIMIT,
+                'offset' => $page * self::SYNC_LIMIT,
+                'status' => [str_replace('wc-', '', $triggerStatus)],
+                'return' => 'ids',
+            ]);
+
+            if (empty($orders)) {
+                break;
+            }
+
+            foreach ($orders as $order_id) {
+                $order = wc_get_order($order_id);
+                if (!$order) {
+                    continue;
+                }
+
+                $docStatus = (string) $order->get_meta('_apisunat_document_status');
+                if (in_array($docStatus, ['PENDIENTE', 'ACEPTADO'], true)) {
+                    $skipped++;
+                    continue;
+                }
+
+                if ($order->get_meta('_apisunat_send_attempts')) {
+                    $skipped++;
+                    continue;
+                }
+
+                as_enqueue_async_action(SendOrderJob::ACTION, ['order_id' => $order_id], SendOrderJob::GROUP);
+                $enqueued++;
+            }
+
+            $page++;
+        }
+
+        $stats = self::statusCounts();
+
+        wp_send_json_success([
+            'message'   => sprintf(__('%d órdenes encoladas, %d omitidas', 'apisunatv2'), $enqueued, $skipped),
+            'enqueued'  => $enqueued,
+            'total'     => array_sum($stats),
+            'pendiente' => $stats['PENDIENTE'] ?? 0,
+            'aceptado'  => $stats['ACEPTADO']  ?? 0,
+            'error'     => $stats['ERROR']     ?? 0,
+        ]);
+    }
+
     public static function ajaxAddTaxRate(): void {
         if (!current_user_can('manage_woocommerce')) {
             wp_send_json_error(['message' => __('Permiso denegado', 'apisunatv2')], 403);
@@ -516,6 +582,8 @@ class SettingsPage {
                         <span class="value" id="stat-api">—</span>
                     </div>
                     <button type="button" id="sync-pending-btn" class="button button-secondary"><?= esc_html__('Sincronizar', 'apisunatv2') ?></button>
+                    <button type="button" id="send-pending-btn" class="button button-primary"><?= esc_html__('Enviar pendientes', 'apisunatv2') ?></button>
+                    <span id="send-pending-result" role="status" aria-live="polite" style="margin-left:6px;"></span>
                 </div>
                 <?php endif; ?>
 
