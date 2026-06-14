@@ -10,9 +10,6 @@ class OrderMetaBox {
     public static function register(): void {
         add_action('add_meta_boxes_shop_order',                       [self::class, 'metaBox']);
         add_action('add_meta_boxes_woocommerce_page_wc-orders',       [self::class, 'metaBox']);
-        add_action('add_meta_boxes_shop_order',                       [self::class, 'detractionMetaBox']);
-        add_action('add_meta_boxes_woocommerce_page_wc-orders',       [self::class, 'detractionMetaBox']);
-
         add_action('woocommerce_admin_order_data_after_billing_address', [self::class, 'billingMeta']);
         add_action('woocommerce_process_shop_order_meta',                [self::class, 'saveOrderMeta']);
     }
@@ -20,19 +17,8 @@ class OrderMetaBox {
     public static function metaBox(): void {
         add_meta_box(
             'sunat_cpe_meta',
-            __('API Sunat', 'apisunatv2'),
+            __('APISUNAT', 'apisunatv2'),
             [self::class, 'render'],
-            null,
-            'side',
-            'default'
-        );
-    }
-
-    public static function detractionMetaBox(): void {
-        add_meta_box(
-            'sunat_detraction_meta',
-            __('Detracción SUNAT', 'apisunatv2'),
-            [self::class, 'renderDetraction'],
             null,
             'side',
             'default'
@@ -68,7 +54,7 @@ class OrderMetaBox {
         <p class="form-field form-field-wide">
             <label for="_billing_apisunat_detraction_enabled">
                 <input type="checkbox" id="_billing_apisunat_detraction_enabled" name="_billing_apisunat_detraction_enabled" value="1" <?php checked($enabled, true); ?>>
-                <?= esc_html__('Aplicar detracción manual', 'apisunatv2') ?>
+                <?= esc_html__('Aplicar Detracción', 'apisunatv2') ?>
             </label>
         </p>
         <div id="sunat_detraction_fields" style="<?= $enabled ? '' : 'display:none;' ?>">
@@ -176,6 +162,10 @@ class OrderMetaBox {
         if ($status === '' || in_array($status, ['ERROR', 'EXCEPCION'], true)) {
             self::emitBtn($order_id, $order->get_status());
         }
+
+        echo '<hr style="border-top:1px solid #ddd; margin:12px 0;">';
+
+        self::renderDetraction($object);
     }
 
     public static function billingMeta(\WC_Order $order): void {

@@ -84,9 +84,9 @@ class ApiSunatService {
             }
 
             if (!self::hasRequiredDocument($order)) {
-                $order->add_order_note(__('API Sunat: Documento del cliente requerido. Completa los campos en el panel lateral del pedido.', 'apisunatv2'));
+                $order->add_order_note(__('APISUNAT: Documento del cliente requerido. Completa los campos en el panel lateral del pedido.', 'apisunatv2'));
                 self::logger()->error('Missing customer document', ['order_id' => $order_id]);
-                throw new \RuntimeException(__('Documento del cliente requerido. Completa el panel "API Sunat" en el pedido.', 'apisunatv2'));
+                throw new \RuntimeException(__('Documento del cliente requerido. Completa el panel "APISUNAT" en el pedido.', 'apisunatv2'));
             }
 
             $payload  = self::buildPayload($order);
@@ -339,6 +339,7 @@ class ApiSunatService {
             $firstBranch['api']        = ($firstBranch['api'] ?? []) + ($config['api'] ?? []);
             $firstBranch['issue']      = ($firstBranch['issue'] ?? []) + ($config['issue'] ?? []);
             $firstBranch['detraction'] = ($firstBranch['detraction'] ?? []) + ($config['detraction'] ?? []);
+            $firstBranch['gre']        = ($firstBranch['gre']        ?? []) + ($config['gre']        ?? []);
             $branches = [$firstBranch];
         }
 
@@ -520,7 +521,7 @@ class ApiSunatService {
 
         if ($status === 'ERROR') {
             $error = $response['error'] ?? $response;
-            $order->add_order_note('API Sunat Error: ' . wp_json_encode($error));
+            $order->add_order_note('APISUNAT Error: ' . wp_json_encode($error));
             self::logger()->error('API returned error', ['order_id' => $order->get_id()]);
             throw new \RuntimeException(__('Error al emitir CPE', 'apisunatv2'));
         }
@@ -575,7 +576,49 @@ class ApiSunatService {
             throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
         }
 
-        $forms = ['gre' => $gre_data];
+        $datos = $gre_data['datos'] ?? [];
+
+        $vehicles = [];
+        foreach (($gre_data['vehiculos'] ?? []) as $v) {
+            $vehicles[] = [
+                'license_plate'      => $v['placa'] ?? '',
+                'authorization_number' => $v['autorizacion'] ?? '',
+                'issuing_entity'      => $v['entidad'] ?? '',
+            ];
+        }
+
+        $drivers = [];
+        foreach (($gre_data['conductores'] ?? []) as $c) {
+            $drivers[] = [
+                'document_type'   => $c['tipo_documento'] ?? '1',
+                'document_number' => $c['numero_documento'] ?? '',
+                'first_name'      => $c['nombres'] ?? '',
+                'last_name'       => $c['apellidos'] ?? '',
+                'driver_license'  => $c['licencia'] ?? '',
+            ];
+        }
+
+        $greDefaults = Options::getValue('gre', []);
+        $transportista = !empty($gre_data['transportista']) ? $gre_data['transportista'] : ($greDefaults['transportista'] ?? []);
+        $partida       = !empty($gre_data['partida'])       ? $gre_data['partida']       : ($greDefaults['partida'] ?? []);
+
+        $grePayload = [
+            'vehicles'                                       => $vehicles,
+            'drivers'                                        => $drivers,
+            'SUNAT_Envio_IndicadorTrasladoVehiculoM1L'       => !empty($datos['vehiculo_categoria']),
+            'carrier_party'                                  => [
+                'document_type'   => '6',
+                'document_number' => $transportista['ruc'] ?? '',
+                'name'            => $transportista['nombre'] ?? '',
+                'mtc_registration' => $transportista['registro_mtc'] ?? $transportista['mtc'] ?? '',
+            ],
+            'origin'                                         => [
+                'ubigeo'  => $partida['ubigeo'] ?? '',
+                'address' => $partida['direccion'] ?? '',
+            ],
+        ];
+
+        $forms = ['gre' => $grePayload];
         $detractionData = [
             'enabled'          => (string) $order->get_meta('_billing_apisunat_detraction_enabled') === '1',
             'tipo'             => $order->get_meta('_billing_apisunat_detraction_tipo'),
@@ -591,7 +634,7 @@ class ApiSunatService {
         $payload = [
             'plugin_data' => array_merge(self::pluginConfig(), ['forms' => $forms]),
             'order_data'  => $order->get_data(),
-            'gre_data'    => $gre_data,
+            'gre_data'    => $grePayload,
         ];
 
         self::logger()->info('GRE Payload', ['payload' => $payload]);

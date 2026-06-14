@@ -28,8 +28,8 @@ class SettingsPage {
     public static function addMenu(): void {
         add_submenu_page(
             'woocommerce',
-            __('API Sunat', 'apisunatv2'),
-            __('API Sunat', 'apisunatv2'),
+            __('APISUNAT', 'apisunatv2'),
+            __('APISUNAT', 'apisunatv2'),
             'manage_woocommerce',
             'apisunat',
             [self::class, 'render']
@@ -95,6 +95,19 @@ class SettingsPage {
             $output['detraction']['payment_method'] = sanitize_text_field((string) ($input['detraction']['payment_method'] ?? '001'));
             $output['detraction']['bank_account'] = sanitize_text_field((string) ($input['detraction']['bank_account'] ?? ''));
             $output['detraction']['exchange_rate'] = sanitize_text_field((string) ($input['detraction']['exchange_rate'] ?? ''));
+        }
+
+        if (isset($input['gre']) && is_array($input['gre'])) {
+            $output['gre']['vehiculo_categoria'] = !empty($input['gre']['vehiculo_categoria']);
+            if (isset($input['gre']['transportista']) && is_array($input['gre']['transportista'])) {
+                $output['gre']['transportista']['nombre'] = sanitize_text_field((string) ($input['gre']['transportista']['nombre'] ?? ''));
+                $output['gre']['transportista']['ruc']    = sanitize_text_field((string) ($input['gre']['transportista']['ruc'] ?? ''));
+                $output['gre']['transportista']['mtc']    = sanitize_text_field((string) ($input['gre']['transportista']['mtc'] ?? ''));
+            }
+            if (isset($input['gre']['partida']) && is_array($input['gre']['partida'])) {
+                $output['gre']['partida']['ubigeo']    = sanitize_text_field((string) ($input['gre']['partida']['ubigeo'] ?? ''));
+                $output['gre']['partida']['direccion'] = sanitize_text_field((string) ($input['gre']['partida']['direccion'] ?? ''));
+            }
         }
 
         if (isset($input['settings']) && is_array($input['settings'])) {
@@ -175,6 +188,22 @@ class SettingsPage {
                     $sanitizedDetraction['exchange_rate']  = sanitize_text_field((string) ($d['exchange_rate'] ?? ''));
                     $existing[$i]['detraction'] = $sanitizedDetraction;
                 }
+
+                if (isset($branch['gre']) && is_array($branch['gre'])) {
+                    $g = $branch['gre'];
+                    $sanitizedGre = [];
+                    $sanitizedGre['vehiculo_categoria'] = !empty($g['vehiculo_categoria']);
+                    if (isset($g['transportista']) && is_array($g['transportista'])) {
+                        $sanitizedGre['transportista']['nombre'] = sanitize_text_field((string) ($g['transportista']['nombre'] ?? ''));
+                        $sanitizedGre['transportista']['ruc']    = sanitize_text_field((string) ($g['transportista']['ruc'] ?? ''));
+                        $sanitizedGre['transportista']['mtc']    = sanitize_text_field((string) ($g['transportista']['mtc'] ?? ''));
+                    }
+                    if (isset($g['partida']) && is_array($g['partida'])) {
+                        $sanitizedGre['partida']['ubigeo']    = sanitize_text_field((string) ($g['partida']['ubigeo'] ?? ''));
+                        $sanitizedGre['partida']['direccion'] = sanitize_text_field((string) ($g['partida']['direccion'] ?? ''));
+                    }
+                    $existing[$i]['gre'] = $sanitizedGre;
+                }
             }
             $output['branches'] = $existing;
         }
@@ -188,6 +217,7 @@ class SettingsPage {
                 'api'        => $existing['api'] ?? [],
                 'issue'    => $existing['issue'] ?? [],
                 'detraction' => $existing['detraction'] ?? [],
+                'gre'      => $existing['gre'] ?? [],
             ]];
         }
 
@@ -506,7 +536,7 @@ class SettingsPage {
         $multi_branch = self::isMultiBranch();
         $branchTabs = [];
         $currentBranch = 0;
-        if ($multi_branch && in_array($currentTab, ['api', 'issue', 'detraction'], true)) {
+        if ($multi_branch && in_array($currentTab, ['api', 'issue', 'detraction', 'gre'], true)) {
             $branches = Options::getValue('branches', []);
             if (empty($branches)) {
                 $branches = [['branch_name' => __('Sucursal 1', 'apisunatv2')]];
@@ -625,7 +655,7 @@ class SettingsPage {
                                     echo '</td></tr>';
                                 }
                                 $branchPrefix = '';
-                                if ($multi_branch && in_array($section['id'], ['apisunat_api', 'apisunat_issue', 'apisunat_detraction'], true)) {
+                                if ($multi_branch && in_array($section['id'], ['apisunat_api', 'apisunat_issue', 'apisunat_detraction', 'apisunat_gre'], true)) {
                                     $branchPrefix = 'branches.' . $currentBranch . '.';
                                 }
                                 foreach ($section['fields'] as $field) {
@@ -659,6 +689,7 @@ class SettingsPage {
             'api'        => ['label' => __('API', 'apisunatv2'),        'section' => 'apisunat_api'],
             'issue'    => ['label' => __('Emisión', 'apisunatv2'),    'section' => 'apisunat_issue'],
             'detraction' => ['label' => __('Detracción', 'apisunatv2'), 'section' => 'apisunat_detraction'],
+            'gre'        => ['label' => __('Guía de Remisión', 'apisunatv2'), 'section' => 'apisunat_gre'],
         ];
     }
 
@@ -1065,7 +1096,7 @@ class SettingsPage {
                 'fields' => [
                     [
                         'key'     => 'issue.mode',
-                        'label'   => __('mode de emisión', 'apisunatv2'),
+                        'label'   => __('Modo de emisión', 'apisunatv2'),
                         'type'    => 'select',
                         'options' => ['automatico' => __('Automático', 'apisunatv2'), 'manual' => __('Manual', 'apisunatv2')],
                         'default' => 'manual',
@@ -1098,6 +1129,18 @@ class SettingsPage {
                     ['key' => 'detraction.bank_account',   'label' => __('Cuenta Bancaria', 'apisunatv2'),        'type' => 'text', 'placeholder' => '00-000-000000'],
                     ['key' => 'detraction.exchange_rate',   'label' => __('Tipo de cambio', 'apisunatv2'), 'type' => 'text', 'placeholder' => 'USD=3.5,EUR=4.0,COP=0.7'],
                     ['key' => 'detraction.enabled',           'label' => __('Aplicar automáticamente para ventas superiores a 700 PEN', 'apisunatv2'), 'type' => 'checkbox'],
+                ],
+            ],
+            [
+                'id'    => 'apisunat_gre',
+                'title' => __('Guía de Remisión', 'apisunatv2'),
+                'fields' => [
+                    ['key' => 'gre.vehiculo_categoria', 'label' => __('Vehículos Categoría M1 o L', 'apisunatv2'), 'type' => 'checkbox'],
+                    ['key' => 'gre.transportista.nombre', 'label' => __('Nombre transportista', 'apisunatv2'), 'type' => 'text'],
+                    ['key' => 'gre.transportista.ruc', 'label' => __('RUC transportista', 'apisunatv2'), 'type' => 'text'],
+                    ['key' => 'gre.transportista.mtc', 'label' => __('Registro MTC', 'apisunatv2'), 'type' => 'text'],
+                    ['key' => 'gre.partida.ubigeo', 'label' => __('Ubigeo partida', 'apisunatv2'), 'type' => 'text', 'placeholder' => '150101'],
+                    ['key' => 'gre.partida.direccion', 'label' => __('Dirección partida', 'apisunatv2'), 'type' => 'text'],
                 ],
             ],
             [

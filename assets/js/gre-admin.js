@@ -57,6 +57,7 @@
             fecha_traslado: val('gre_fecha_traslado'),
             modalidad_transporte: val('gre_modalidad_transporte'),
             vehiculo_categoria: $('#gre_vehiculo_categoria').is(':checked') ? '1' : '',
+            customize_items: $('#gre_customize_items').is(':checked') ? '1' : '',
             motivo_traslado: val('gre_motivo_traslado'),
             partida_departamento: val('gre_partida_departamento'),
             partida_provincia: val('gre_partida_provincia'),
@@ -280,25 +281,37 @@
         $(this).closest('.gre-conductor-item').remove();
     });
 
-    $(document).on('change', '#gre_modalidad_transporte', function () {
-        var val = $(this).val();
-        var $cat = $('#gre_vehiculo_categoria');
-        if (val === '01') {
+    function updateTransportSections() {
+        var modalidad = $('#gre_modalidad_transporte').val();
+        var isM1orL = $('#gre_vehiculo_categoria').is(':checked');
+        if (modalidad === '01') {
+            $('#gre-vehiculo-categoria-wrapper').hide();
             $('#gre-transportista-section').show();
             $('#gre-vehiculos-section').hide();
             $('#gre-conductores-section').hide();
-            $cat.prop('disabled', false);
-        } else if (val === '02') {
+        } else if (modalidad === '02') {
+            $('#gre-vehiculo-categoria-wrapper').show();
             $('#gre-transportista-section').hide();
-            $('#gre-vehiculos-section').show();
-            $('#gre-conductores-section').show();
-            $cat.prop('disabled', true).prop('checked', false);
+            if (isM1orL) {
+                $('#gre-vehiculos-section').hide();
+                $('#gre-conductores-section').hide();
+            } else {
+                $('#gre-vehiculos-section').show();
+                $('#gre-conductores-section').show();
+            }
         } else {
+            $('#gre-vehiculo-categoria-wrapper').hide();
             $('#gre-transportista-section').hide();
             $('#gre-vehiculos-section').hide();
             $('#gre-conductores-section').hide();
-            $cat.prop('disabled', true).prop('checked', false);
         }
+    }
+
+    $(document).on('change', '#gre_modalidad_transporte', updateTransportSections);
+    $(document).on('change', '#gre_vehiculo_categoria', updateTransportSections);
+
+    $(document).on('change', '#gre_customize_items', function () {
+        $('#gre-items-wrapper').toggle(this.checked);
     });
 
     $(document).on('click', '#gre-save-draft-btn', function (e) {

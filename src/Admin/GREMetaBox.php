@@ -80,10 +80,10 @@ class GREMetaBox {
                         <label for="gre_motivo_traslado"><?= esc_html__('Motivo de Traslado', 'apisunatv2') ?></label>
                         <select id="gre_motivo_traslado" class="gre-field">
                             <option value=""><?= esc_html__('Seleccionar...', 'apisunatv2') ?></option>
-                            <option value="01" <?= selected($datos['motivo_traslado'] ?? '', '01', false) ?>><?= esc_html__('Traslado por Venta', 'apisunatv2') ?></option>
+                            <!--option value="01" <?= selected($datos['motivo_traslado'] ?? '', '01', false) ?>><?= esc_html__('Traslado por Venta', 'apisunatv2') ?></option-->
                             <option value="02" <?= selected($datos['motivo_traslado'] ?? '', '02', false) ?>><?= esc_html__('Traslado por Compra', 'apisunatv2') ?></option>
-                            <option value="03" <?= selected($datos['motivo_traslado'] ?? '', '03', false) ?>><?= esc_html__('Venta con entrega a terceros', 'apisunatv2') ?></option>
-                            <option value="14" <?= selected($datos['motivo_traslado'] ?? '', '14', false) ?>><?= esc_html__('Venta sujeta a confirmación', 'apisunatv2') ?></option>
+                            <!--option value="03" <?= selected($datos['motivo_traslado'] ?? '', '03', false) ?>><?= esc_html__('Venta con entrega a terceros', 'apisunatv2') ?></option-->
+                            <!--option value="14" <?= selected($datos['motivo_traslado'] ?? '', '14', false) ?>><?= esc_html__('Venta sujeta a confirmación', 'apisunatv2') ?></option-->
                             <option value="18" <?= selected($datos['motivo_traslado'] ?? '', '18', false) ?>><?= esc_html__('Traslado emisor itinerante CP', 'apisunatv2') ?></option>
                             <option value="04" <?= selected($datos['motivo_traslado'] ?? '', '04', false) ?>><?= esc_html__('Traslado entre establecimientos', 'apisunatv2') ?></option>
                             <option value="05" <?= selected($datos['motivo_traslado'] ?? '', '05', false) ?>><?= esc_html__('Traslado por Consignación', 'apisunatv2') ?></option>
@@ -95,6 +95,7 @@ class GREMetaBox {
                             <option value="13" <?= selected($datos['motivo_traslado'] ?? '', '13', false) ?>><?= esc_html__('Otros', 'apisunatv2') ?></option>
                         </select>
                     </p>
+
                     <p class="form-field form-field-wide">
                         <label for="gre_modalidad_transporte"><?= esc_html__('Modalidad de Transporte', 'apisunatv2') ?></label>
                         <select id="gre_modalidad_transporte" class="gre-field">
@@ -104,30 +105,31 @@ class GREMetaBox {
                         </select>
                     </p>
 
-                    <div id="gre-transportista-section" style="<?= ($datos['modalidad_transporte'] ?? '') === '01' ? '' : 'display:none;' ?>">
-                        <h4><?= esc_html__('Transportista', 'apisunatv2') ?></h4>
-                        <p class="form-field form-field-wide">
-                            <label class="checkbox style-e" for="gre_vehiculo_categoria">
-                                <input type="checkbox" id="gre_vehiculo_categoria" value="1" <?php checked(!empty($datos['vehiculo_categoria'])); ?><?= (($datos['modalidad_transporte'] ?? '') === '02') ? ' disabled' : '' ?>>
-                                <div class="checkbox__checkmark"></div>
-                            </label>
-                            <span style="margin-left:50px;display:inline-block;vertical-align:middle"><?= esc_html__('Vehículos Categoría M1 o L', 'apisunatv2') ?></span>
-                        </p>
-                        <p class="form-field form-field-wide">
-                            <label for="gre_transportista_nombre"><?= esc_html__('Nombre Transportista', 'apisunatv2') ?></label>
-                            <input type="text" id="gre_transportista_nombre" class="gre-field" value="<?= esc_attr($transportista['nombre'] ?? '') ?>">
-                        </p>
-                        <p class="form-field form-field-wide">
-                            <label for="gre_transportista_ruc"><?= esc_html__('RUC Transportista', 'apisunatv2') ?></label>
-                            <input type="text" id="gre_transportista_ruc" class="gre-field" value="<?= esc_attr($transportista['ruc'] ?? '') ?>">
-                        </p>
-                        <p class="form-field form-field-wide">
-                            <label for="gre_transportista_mtc"><?= esc_html__('Registro MTC', 'apisunatv2') ?></label>
-                            <input type="text" id="gre_transportista_mtc" class="gre-field" value="<?= esc_attr($transportista['registro_mtc'] ?? '') ?>">
-                        </p>
+                    <div id="gre-vehiculo-categoria-wrapper" class="form-field form-field-wide" style="<?= ($datos['modalidad_transporte'] ?? '') === '02' ? '' : 'display:none;' ?>">
+                        <label class="checkbox style-e" for="gre_vehiculo_categoria">
+                            <input type="checkbox" id="gre_vehiculo_categoria" value="1" <?php checked(!empty($datos['vehiculo_categoria'])); ?> />
+                            <div class="checkbox__checkmark"></div>
+                        </label>
+                        <span style="margin-left:50px;display:inline-block;vertical-align:middle"><?= esc_html__('Vehículos Categoría M1 o L', 'apisunatv2') ?></span>
                     </div>
 
-                    <div id="gre-vehiculos-section" style="<?= ($datos['modalidad_transporte'] ?? '') === '02' ? '' : 'display:none;' ?>">
+                    <div id="gre-transportista-section" style="<?= ($datos['modalidad_transporte'] ?? '') === '01' ? '' : 'display:none;' ?>">
+                        <h4><?= esc_html__('Transportista', 'apisunatv2') ?></h4>
+                        <div class="form-field form-field-wide">
+                            <label for="gre_transportista_nombre"><?= esc_html__('Nombre Transportista', 'apisunatv2') ?></label>
+                            <input type="text" id="gre_transportista_nombre" class="gre-field" value="<?= esc_attr($transportista['nombre'] ?? '') ?>">
+                        </div>
+                        <div class="form-field form-field-wide">
+                            <label for="gre_transportista_ruc"><?= esc_html__('RUC Transportista', 'apisunatv2') ?></label>
+                            <input type="text" id="gre_transportista_ruc" class="gre-field" value="<?= esc_attr($transportista['ruc'] ?? '') ?>">
+                        </div>
+                        <div class="form-field form-field-wide">
+                            <label for="gre_transportista_mtc"><?= esc_html__('Registro MTC', 'apisunatv2') ?></label>
+                            <input type="text" id="gre_transportista_mtc" class="gre-field" value="<?= esc_attr($transportista['registro_mtc'] ?? '') ?>">
+                        </div>
+                    </div>
+
+                    <div id="gre-vehiculos-section" style="<?= ($datos['modalidad_transporte'] ?? '') === '02' && empty($datos['vehiculo_categoria']) ? '' : 'display:none;' ?>">
                         <h4><?= esc_html__('Vehículos', 'apisunatv2') ?></h4>
                         <div id="gre-vehiculos-list">
                             <?php foreach ($vehiculos as $i => $v): ?>
@@ -152,7 +154,7 @@ class GREMetaBox {
                         <button type="button" class="button" id="gre-add-vehiculo"><?= esc_html__('Agregar Vehículo', 'apisunatv2') ?></button>
                     </div>
 
-                    <div id="gre-conductores-section" style="<?= ($datos['modalidad_transporte'] ?? '') === '02' ? '' : 'display:none;' ?>">
+                    <div id="gre-conductores-section" style="<?= ($datos['modalidad_transporte'] ?? '') === '02' && empty($datos['vehiculo_categoria']) ? '' : 'display:none;' ?>">
                         <h4><?= esc_html__('Conductores', 'apisunatv2') ?></h4>
                         <div id="gre-conductores-list">
                             <?php foreach ($conductores as $i => $c): ?>
@@ -233,8 +235,17 @@ class GREMetaBox {
                         <input type="text" id="gre_llegada_direccion" class="gre-field" value="<?= esc_attr($llegada['direccion'] ?? '') ?>">
                     </p>
 
-                    <h4><?= esc_html__('Productos', 'apisunatv2') ?></h4>
-                    <div id="gre-items-list">
+                    <div class="form-field form-field-wide">
+                        <label class="checkbox style-e" for="gre_customize_items">
+                            <input type="checkbox" id="gre_customize_items" value="1" <?php checked(!empty($items)); ?> />
+                            <div class="checkbox__checkmark"></div>
+                        </label>
+                        <span style="margin-left:50px;display:inline-block;vertical-align:middle"><?= esc_html__('Personalizar ítems', 'apisunatv2') ?></span>
+                    </div>
+
+                    <div id="gre-items-wrapper" style="<?= !empty($items) ? '' : 'display:none;' ?>">
+                        <h4><?= esc_html__('Productos', 'apisunatv2') ?></h4>
+                        <div id="gre-items-list">
                         <?php foreach ($items as $i => $it): ?>
                         <div class="gre-item-row" data-index="<?= $i ?>">
                             <p class="form-field form-field-wide">
@@ -255,6 +266,7 @@ class GREMetaBox {
                         <?php endforeach; ?>
                     </div>
                     <button type="button" class="button" id="gre-add-item"><?= esc_html__('Agregar Producto', 'apisunatv2') ?></button>
+                    </div>
 
                     <p class="form-field form-field-wide">
                         <label for="gre_peso_bruto"><?= esc_html__('Peso Bruto Total (kg)', 'apisunatv2') ?></label>
@@ -528,6 +540,7 @@ class GREMetaBox {
                 'motivo_traslado'      => $get('motivo_traslado'),
                 'modalidad_transporte' => $get('modalidad_transporte'),
                 'vehiculo_categoria'   => isset($_POST['vehiculo_categoria']) && $_POST['vehiculo_categoria'] === '1' ? '1' : '',
+                'customize_items'     => isset($_POST['customize_items']) && $_POST['customize_items'] === '1' ? '1' : '',
                 'peso_bruto'           => $get('peso_bruto'),
                 'observaciones'        => $get('observaciones'),
             ],
@@ -577,17 +590,13 @@ class GREMetaBox {
             $errors[] = __('Dirección de llegada es obligatoria', 'apisunatv2');
         }
 
-        if (empty($data['items'])) {
-            $errors[] = __('Agregue al menos un ítem', 'apisunatv2');
+        if (!empty($data['datos']['customize_items'])) {
+            if (empty($data['items'])) {
+                $errors[] = __('Agregue al menos un ítem', 'apisunatv2');
+            }
         }
 
-        if ($modalidad === '01') {
-            foreach (['nombre', 'ruc'] as $k) {
-                if (trim($data['transportista'][$k] ?? '') === '') {
-                    $errors[] = sprintf(__('Transportista: %s es obligatorio', 'apisunatv2'), $k);
-                }
-            }
-        } elseif ($modalidad === '02') {
+        if ($modalidad === '02') {
             if (empty($data['vehiculos'])) {
                 $errors[] = __('Agregue al menos un vehículo', 'apisunatv2');
             }

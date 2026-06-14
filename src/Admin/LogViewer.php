@@ -18,7 +18,7 @@ class LogViewer {
 
         add_submenu_page(
             'woocommerce',
-            __('Logs API Sunat', 'apisunatv2'),
+            __('Logs APISUNAT', 'apisunatv2'),
             __('Logs', 'apisunatv2'),
             'manage_woocommerce',
             'apisunatv2-logs',

@@ -54,7 +54,7 @@ class SendOrderJob {
             if (!$isTransient) {
                 $order->update_meta_data('_apisunat_document_status', 'ERROR');
                 $order->save();
-                $order->add_order_note('API Sunat: ' . $e->getMessage());
+                $order->add_order_note('APISUNAT: ' . $e->getMessage());
                 return;
             }
 
@@ -62,14 +62,14 @@ class SendOrderJob {
                 $order->update_meta_data('_apisunat_document_status', 'ERROR');
                 $order->save();
                 $order->add_order_note(
-                    sprintf(__('API Sunat: agotados %d reintentos. Último error: %s', 'apisunatv2'), self::MAX_ATTEMPTS, $e->getMessage())
+                    sprintf(__('APISUNAT: agotados %d reintentos. Último error: %s', 'apisunatv2'), self::MAX_ATTEMPTS, $e->getMessage())
                 );
                 return;
             }
 
             $delay = self::RETRY_DELAYS[$attempts - 1] ?? end(self::RETRY_DELAYS);
             $order->add_order_note(
-                sprintf(__('API Sunat: error transitorio, reintento #%d en %d min. Error: %s', 'apisunatv2'), $attempts, $delay / 60, $e->getMessage())
+                sprintf(__('APISUNAT: error transitorio, reintento #%d en %d min. Error: %s', 'apisunatv2'), $attempts, $delay / 60, $e->getMessage())
             );
 
             if (function_exists('as_schedule_single_action')) {

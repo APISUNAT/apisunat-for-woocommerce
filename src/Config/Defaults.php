@@ -54,6 +54,18 @@ class Defaults {
                     'customer_id_key'      => '_billing_apisunat_customer_id',
                 ],
             ],
+            'gre' => [
+                'vehiculo_categoria' => false,
+                'transportista' => [
+                    'nombre' => '',
+                    'ruc'    => '',
+                    'mtc'    => '',
+                ],
+                'partida' => [
+                    'ubigeo'    => '',
+                    'direccion' => '',
+                ],
+            ],
             'branches' => [],
         ];
     }
