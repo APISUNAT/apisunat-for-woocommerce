@@ -285,12 +285,10 @@
         var modalidad = $('#gre_modalidad_transporte').val();
         var isM1orL = $('#gre_vehiculo_categoria').is(':checked');
         if (modalidad === '01') {
-            $('#gre-vehiculo-categoria-wrapper').hide();
             $('#gre-transportista-section').show();
             $('#gre-vehiculos-section').hide();
             $('#gre-conductores-section').hide();
         } else if (modalidad === '02') {
-            $('#gre-vehiculo-categoria-wrapper').show();
             $('#gre-transportista-section').hide();
             if (isM1orL) {
                 $('#gre-vehiculos-section').hide();
@@ -300,7 +298,6 @@
                 $('#gre-conductores-section').show();
             }
         } else {
-            $('#gre-vehiculo-categoria-wrapper').hide();
             $('#gre-transportista-section').hide();
             $('#gre-vehiculos-section').hide();
             $('#gre-conductores-section').hide();

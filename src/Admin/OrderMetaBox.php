@@ -38,11 +38,24 @@ class OrderMetaBox {
             return;
         }
 
+        $branchDetraction = [];
+        $branchKey = Options::getValue('settings.multi_branch_key', '');
+        if ($branchKey !== '') {
+            $branchId = (string) $order->get_meta($branchKey);
+            if ($branchId !== '') {
+                $branch = Options::getBranch($branchId);
+                if ($branch !== null && isset($branch['detraction'])) {
+                    $branchDetraction = $branch['detraction'];
+                }
+            }
+        }
+        $branchDetraction = $branchDetraction + (array) Options::getValue('detraction', []);
+
         $enabled         = (string) $order->get_meta('_billing_apisunat_detraction_enabled') === '1';
-        $detraction_type = (string) ($order->get_meta('_billing_apisunat_detraction_tipo') ?: Options::getValue('detraction.detraction_type', ''));
-        $percentage      = (string) ($order->get_meta('_billing_apisunat_detraction_percentage') ?: Options::getValue('detraction.percentage', 12));
-        $payment_method   = (string) ($order->get_meta('_billing_apisunat_detraction_payment_method') ?: Options::getValue('detraction.payment_method', '001'));
-        $cuenta_banco    = (string) ($order->get_meta('_billing_apisunat_detraction_cuenta_banco') ?: Options::getValue('detraction.bank_account', ''));
+        $detraction_type = (string) ($order->get_meta('_billing_apisunat_detraction_tipo') ?: ($branchDetraction['detraction_type'] ?? ''));
+        $percentage      = (string) ($order->get_meta('_billing_apisunat_detraction_percentage') ?: ($branchDetraction['percentage'] ?? 12));
+        $payment_method   = (string) ($order->get_meta('_billing_apisunat_detraction_payment_method') ?: ($branchDetraction['payment_method'] ?? '001'));
+        $cuenta_banco    = (string) ($order->get_meta('_billing_apisunat_detraction_cuenta_banco') ?: ($branchDetraction['bank_account'] ?? ''));
         $monto_total     = $order->get_meta('_billing_apisunat_detraction_monto_total');
         $order_total     = (float) $order->get_total();
         $monto_default   = $order_total > 0 && $percentage > 0 ? round($order_total * (float) $percentage / 100, 2) : 0;
@@ -159,13 +172,15 @@ class OrderMetaBox {
             );
         }
 
-        if ($status === '' || in_array($status, ['ERROR', 'EXCEPCION'], true)) {
-            self::emitBtn($order_id, $order->get_status());
-        }
-
         echo '<hr style="border-top:1px solid #ddd; margin:12px 0;">';
 
         self::renderDetraction($object);
+
+        echo '<hr style="border-top:1px solid #ddd; margin:12px 0;">';
+
+        if ($status === '' || in_array($status, ['ERROR', 'EXCEPCION'], true)) {
+            self::emitBtn($order_id, $order->get_status());
+        }
     }
 
     public static function billingMeta(\WC_Order $order): void {

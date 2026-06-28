@@ -578,6 +578,11 @@ class ApiSunatService {
 
         $datos = $gre_data['datos'] ?? [];
 
+        $fecha       = !empty($datos['fecha_traslado']) ? $datos['fecha_traslado'] : current_time('Y-m-d');
+        $hora        = !empty($datos['hora_traslado'])  ? $datos['hora_traslado']  : current_time('H:i:s');
+        $motivo      = !empty($datos['motivo_traslado']) ? $datos['motivo_traslado'] : '01';
+        $modalidad   = !empty($datos['modalidad_transporte']) ? $datos['modalidad_transporte'] : '01';
+
         $vehicles = [];
         foreach (($gre_data['vehiculos'] ?? []) as $v) {
             $vehicles[] = [
@@ -603,6 +608,10 @@ class ApiSunatService {
         $partida       = !empty($gre_data['partida'])       ? $gre_data['partida']       : ($greDefaults['partida'] ?? []);
 
         $grePayload = [
+            'fecha_traslado'                                 => $fecha,
+            'hora_traslado'                                  => $hora,
+            'motivo_traslado'                                => $motivo,
+            'modalidad_transporte'                           => $modalidad,
             'vehicles'                                       => $vehicles,
             'drivers'                                        => $drivers,
             'SUNAT_Envio_IndicadorTrasladoVehiculoM1L'       => !empty($datos['vehiculo_categoria']),

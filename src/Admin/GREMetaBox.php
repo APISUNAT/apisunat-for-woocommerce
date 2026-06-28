@@ -74,17 +74,21 @@ class GREMetaBox {
                 <div id="sunat-gre-fields">
                     <p class="form-field form-field-wide">
                         <label for="gre_fecha_traslado"><?= esc_html__('Fecha de Inicio de Traslado', 'apisunatv2') ?></label>
-                        <input type="date" id="gre_fecha_traslado" class="gre-field" value="<?= esc_attr($datos['fecha_traslado'] ?? date('Y-m-d')) ?>">
+                        <input type="date" id="gre_fecha_traslado" class="gre-field" value="<?= esc_attr($datos['fecha_traslado'] ?? wp_date('Y-m-d')) ?>">
+                    </p>
+                    <p class="form-field form-field-wide">
+                        <label for="gre_hora_traslado"><?= esc_html__('Hora de Inicio de Traslado', 'apisunatv2') ?></label>
+                        <input type="time" id="gre_hora_traslado" class="gre-field" value="<?= esc_attr($datos['hora_traslado'] ?? wp_date('H:i')) ?>">
                     </p>
                     <p class="form-field form-field-wide">
                         <label for="gre_motivo_traslado"><?= esc_html__('Motivo de Traslado', 'apisunatv2') ?></label>
                         <select id="gre_motivo_traslado" class="gre-field">
                             <option value=""><?= esc_html__('Seleccionar...', 'apisunatv2') ?></option>
-                            <!--option value="01" <?= selected($datos['motivo_traslado'] ?? '', '01', false) ?>><?= esc_html__('Traslado por Venta', 'apisunatv2') ?></option-->
-                            <option value="02" <?= selected($datos['motivo_traslado'] ?? '', '02', false) ?>><?= esc_html__('Traslado por Compra', 'apisunatv2') ?></option>
-                            <!--option value="03" <?= selected($datos['motivo_traslado'] ?? '', '03', false) ?>><?= esc_html__('Venta con entrega a terceros', 'apisunatv2') ?></option-->
-                            <!--option value="14" <?= selected($datos['motivo_traslado'] ?? '', '14', false) ?>><?= esc_html__('Venta sujeta a confirmación', 'apisunatv2') ?></option-->
-                            <option value="18" <?= selected($datos['motivo_traslado'] ?? '', '18', false) ?>><?= esc_html__('Traslado emisor itinerante CP', 'apisunatv2') ?></option>
+                            <option value="01" <?= selected($datos['motivo_traslado'] ?? '', '01', false) ?>><?= esc_html__('Traslado por Venta', 'apisunatv2') ?></option>
+                            <!--option value="02" <?= selected($datos['motivo_traslado'] ?? '', '02', false) ?>><?= esc_html__('Traslado por Compra', 'apisunatv2') ?></option-->
+                            <option value="03" <?= selected($datos['motivo_traslado'] ?? '', '03', false) ?>><?= esc_html__('Venta con entrega a terceros', 'apisunatv2') ?></option>
+                            <option value="14" <?= selected($datos['motivo_traslado'] ?? '', '14', false) ?>><?= esc_html__('Venta sujeta a confirmación', 'apisunatv2') ?></option>
+                            <!--option value="18" <?= selected($datos['motivo_traslado'] ?? '', '18', false) ?>><?= esc_html__('Traslado emisor itinerante CP', 'apisunatv2') ?></option>
                             <option value="04" <?= selected($datos['motivo_traslado'] ?? '', '04', false) ?>><?= esc_html__('Traslado entre establecimientos', 'apisunatv2') ?></option>
                             <option value="05" <?= selected($datos['motivo_traslado'] ?? '', '05', false) ?>><?= esc_html__('Traslado por Consignación', 'apisunatv2') ?></option>
                             <option value="06" <?= selected($datos['motivo_traslado'] ?? '', '06', false) ?>><?= esc_html__('Traslado por Devolución', 'apisunatv2') ?></option>
@@ -92,7 +96,7 @@ class GREMetaBox {
                             <option value="09" <?= selected($datos['motivo_traslado'] ?? '', '09', false) ?>><?= esc_html__('Traslado por Exportación', 'apisunatv2') ?></option>
                             <option value="17" <?= selected($datos['motivo_traslado'] ?? '', '17', false) ?>><?= esc_html__('Traslado de bienes para transformación', 'apisunatv2') ?></option>
                             <option value="07" <?= selected($datos['motivo_traslado'] ?? '', '07', false) ?>><?= esc_html__('Recojo de bienes transformados', 'apisunatv2') ?></option>
-                            <option value="13" <?= selected($datos['motivo_traslado'] ?? '', '13', false) ?>><?= esc_html__('Otros', 'apisunatv2') ?></option>
+                            <option value="13" <?= selected($datos['motivo_traslado'] ?? '', '13', false) ?>><?= esc_html__('Otros', 'apisunatv2') ?></option-->
                         </select>
                     </p>
 
@@ -105,7 +109,7 @@ class GREMetaBox {
                         </select>
                     </p>
 
-                    <div id="gre-vehiculo-categoria-wrapper" class="form-field form-field-wide" style="<?= ($datos['modalidad_transporte'] ?? '') === '02' ? '' : 'display:none;' ?>">
+                    <div id="gre-vehiculo-categoria-wrapper" class="form-field form-field-wide">
                         <label class="checkbox style-e" for="gre_vehiculo_categoria">
                             <input type="checkbox" id="gre_vehiculo_categoria" value="1" <?php checked(!empty($datos['vehiculo_categoria'])); ?> />
                             <div class="checkbox__checkmark"></div>
@@ -537,6 +541,7 @@ class GREMetaBox {
         $data = [
             'datos' => [
                 'fecha_traslado'       => $get('fecha_traslado'),
+                'hora_traslado'        => $get('hora_traslado'),
                 'motivo_traslado'      => $get('motivo_traslado'),
                 'modalidad_transporte' => $get('modalidad_transporte'),
                 'vehiculo_categoria'   => isset($_POST['vehiculo_categoria']) && $_POST['vehiculo_categoria'] === '1' ? '1' : '',
