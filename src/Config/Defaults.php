@@ -56,6 +56,8 @@ class Defaults {
             ],
             'gre' => [
                 'vehiculo_categoria' => false,
+                'motivo_traslado'    => '01',
+                'modalidad_transporte' => '01',
                 'transportista' => [
                     'nombre' => '',
                     'ruc'    => '',

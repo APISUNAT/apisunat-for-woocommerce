@@ -25,11 +25,13 @@ class AdminAssets {
             return;
         }
 
+        $admin_css_path = dirname(__DIR__, 2) . '/assets/css/admin.css';
+        $admin_css_version = file_exists($admin_css_path) ? (string) filemtime($admin_css_path) : APISUNATWP_VERSION;
         wp_enqueue_style(
             'apisunatv2-admin',
             self::$plugin_url . 'assets/css/admin.css',
             [],
-            APISUNATWP_VERSION
+            $admin_css_version
         );
 
         if ($is_order) {

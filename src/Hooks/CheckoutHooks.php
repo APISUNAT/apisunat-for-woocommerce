@@ -316,6 +316,13 @@ class CheckoutHooks {
             return;
         }
 
+        wp_enqueue_style(
+            'apisunatv2-checkout',
+            plugins_url('assets/css/checkout.css', dirname(__DIR__, 2) . '/apisunatwp.php'),
+            [],
+            defined('APISUNATWP_VERSION') ? APISUNATWP_VERSION : '1.0.0'
+        );
+
         wp_enqueue_script(
             'apisunatv2-checkout',
             plugins_url('assets/js/checkout.js', dirname(__DIR__, 2) . '/apisunatwp.php'),

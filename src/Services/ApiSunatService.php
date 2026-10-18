@@ -660,6 +660,44 @@ class ApiSunatService {
         return $response;
     }
 
+    public static function checkGreStatus(int $order_id): void {
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return;
+        }
+
+        $docId = (string) $order->get_meta('_gre_document_id');
+        if ($docId === '') {
+            return;
+        }
+
+        try {
+            $response = self::request('GET', self::BASE_URL . '/documents/' . rawurlencode($docId) . '/getById');
+            if (isset($response['status']) && is_string($response['status'])) {
+                $newStatus = $response['status'];
+                $order->update_meta_data('_gre_status', $newStatus);
+                $order->save();
+                $order->add_order_note(sprintf(__('Estado GRE actualizado: %s', 'apisunatv2'), $newStatus));
+            }
+        } catch (\Throwable $e) {
+            self::logger()->warning('GRE status check failed', [
+                'order_id' => $order_id,
+                'error'    => $e->getMessage(),
+            ]);
+        }
+
+        $currentStatus = (string) $order->get_meta('_gre_status');
+        if ($currentStatus === 'PENDIENTE' && function_exists('as_schedule_single_action')) {
+            as_schedule_single_action(
+                time() + 120,
+                'apisunat_check_gre_status',
+                ['order_id' => $order_id],
+                'apisunatv2',
+                true
+            );
+        }
+    }
+
     public static function voidGRE(int $order_id, string $docId, string $reason): void {
         $order = wc_get_order($order_id);
         if (!$order) {

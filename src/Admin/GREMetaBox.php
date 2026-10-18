@@ -2,6 +2,7 @@
 namespace Atm\Apisunatwp\Admin;
 
 use Atm\Apisunatwp\Data\Ubigeo;
+use Atm\Apisunatwp\Config\Options;
 
 class GREMetaBox {
 
@@ -13,6 +14,8 @@ class GREMetaBox {
         add_action('wp_ajax_apisunat_gre_emit',            [self::class, 'ajaxEmit']);
         add_action('wp_ajax_apisunat_gre_void',            [self::class, 'ajaxVoid']);
         add_action('wp_ajax_apisunat_gre_load',            [self::class, 'ajaxLoad']);
+        add_action('wp_ajax_apisunat_gre_check_status',    [self::class, 'ajaxGreCheckStatus']);
+        add_action('apisunat_check_gre_status',            [self::class, 'handleStatusCheck']);
     }
 
     public static function metaBox(): void {
@@ -53,6 +56,33 @@ class GREMetaBox {
         $conductores = $gre_data['conductores'] ?? [];
         $items = $gre_data['items'] ?? [];
 
+        if (empty($gre_data)) {
+            $branchKey = Options::getValue('settings.multi_branch_key', '');
+            $greDefaults = Options::getValue('gre', []);
+            if ($branchKey !== '') {
+                $branchId = (string) $order->get_meta($branchKey);
+                if ($branchId !== '') {
+                    $branch = Options::getBranch($branchId);
+                    if ($branch !== null && isset($branch['gre'])) {
+                        $greDefaults = $branch['gre'];
+                    }
+                }
+            }
+            $datos['motivo_traslado'] = $datos['motivo_traslado'] ?? ($greDefaults['motivo_traslado'] ?? '');
+            $datos['modalidad_transporte'] = $datos['modalidad_transporte'] ?? ($greDefaults['modalidad_transporte'] ?? '');
+            $datos['vehiculo_categoria'] = $datos['vehiculo_categoria'] ?? (!empty($greDefaults['vehiculo_categoria']) ? '1' : '');
+            $transportista = !empty($greDefaults['transportista']) ? $greDefaults['transportista'] : [];
+            $partida = !empty($greDefaults['partida']) ? $greDefaults['partida'] : [];
+            $defaultVeh = $greDefaults['vehiculo'] ?? [];
+            if (!empty($defaultVeh['placa'])) {
+                $vehiculos[] = $defaultVeh;
+            }
+            $defaultCond = $greDefaults['conductor'] ?? [];
+            if (!empty($defaultCond['numero_documento'])) {
+                $conductores[] = $defaultCond;
+            }
+        }
+
         $ubigeo_js = wp_json_encode(Ubigeo::getData());
         ?>
         <div id="sunat-gre-container" data-order="<?= esc_attr($order_id) ?>" data-status="<?= esc_attr($gre_status) ?>">
@@ -64,7 +94,7 @@ class GREMetaBox {
                 <?php endif; ?>
             </div>
 
-            <div id="sunat-gre-form" style="<?= $gre_status === 'EMITIDO' ? 'display:none;' : '' ?>">
+            <div id="sunat-gre-form" style="<?= in_array($gre_status, ['EMITIDO', 'ACEPTADO', 'PENDIENTE', 'ANULADO'], true) ? 'display:none;' : '' ?>">
                 <input type="hidden" id="gre_order_id" value="<?= esc_attr($order_id) ?>">
 
                 <div id="sunat-gre-spinner" style="display:none;text-align:center;padding:20px;">
@@ -129,7 +159,7 @@ class GREMetaBox {
                         </div>
                         <div class="form-field form-field-wide">
                             <label for="gre_transportista_mtc"><?= esc_html__('Registro MTC', 'apisunatv2') ?></label>
-                            <input type="text" id="gre_transportista_mtc" class="gre-field" value="<?= esc_attr($transportista['registro_mtc'] ?? '') ?>">
+                            <input type="text" id="gre_transportista_mtc" class="gre-field" value="<?= esc_attr($transportista['mtc'] ?? '') ?>">
                         </div>
                     </div>
 
@@ -288,7 +318,7 @@ class GREMetaBox {
                 </p>
             </div>
 
-            <div id="sunat-gre-emitido" style="<?= $gre_status === 'EMITIDO' ? '' : 'display:none;' ?>">
+            <div id="sunat-gre-emitido" style="<?= in_array($gre_status, ['EMITIDO', 'ACEPTADO'], true) ? '' : 'display:none;' ?>">
                 <p><?= esc_html__('GRE emitida', 'apisunatv2') ?></p>
                 <?php if (!empty($gre_data['numero'])): ?>
                     <p><strong><?= esc_html($gre_data['numero']) ?></strong></p>
@@ -299,10 +329,46 @@ class GREMetaBox {
                     <button type="button" class="button button-primary" id="gre-confirm-void" style="margin-top:4px;"><?= esc_html__('Confirmar Anulación', 'apisunatv2') ?></button>
                 </div>
             </div>
+
+            <div id="sunat-gre-pendiente" style="<?= $gre_status === 'PENDIENTE' ? '' : 'display:none;' ?>">
+                <p><?= esc_html__('GRE pendiente de confirmación', 'apisunatv2') ?></p>
+                <?php if (!empty($gre_data['numero'])): ?>
+                    <p><strong><?= esc_html($gre_data['numero']) ?></strong></p>
+                <?php endif; ?>
+                <button type="button" class="button" id="gre-check-status-btn"><?= esc_html__('Verificar estado', 'apisunatv2') ?></button>
+            </div>
         </div>
 
         <script>
         window.apisunatv2_ubigeo = <?= $ubigeo_js ?>;
+        document.addEventListener('DOMContentLoaded', function() {
+            var checkBtn = document.getElementById('gre-check-status-btn');
+            if (checkBtn) {
+                checkBtn.addEventListener('click', function() {
+                    var btn = this;
+                    btn.disabled = true;
+                    btn.textContent = '<?= esc_js(__('Verificando...', 'apisunatv2')) ?>';
+                    var data = new FormData();
+                    data.append('action', 'apisunat_gre_check_status');
+                    data.append('order_id', '<?= esc_js($order_id) ?>');
+                    data.append('nonce', '<?= esc_js(wp_create_nonce(\Atm\Apisunatwp\Admin\OrderActions::NONCE_ACTION)) ?>');
+                    fetch(ajaxurl, { method: 'POST', body: data })
+                        .then(function(r) { return r.json(); })
+                        .then(function(res) {
+                            if (res && res.success) {
+                                window.location.reload();
+                            } else {
+                                btn.disabled = false;
+                                btn.textContent = '<?= esc_js(__('Verificar estado', 'apisunatv2')) ?>';
+                            }
+                        })
+                        .catch(function() {
+                            btn.disabled = false;
+                            btn.textContent = '<?= esc_js(__('Verificar estado', 'apisunatv2')) ?>';
+                        });
+                });
+            }
+        });
         </script>
         <?php
     }
@@ -429,6 +495,25 @@ class GREMetaBox {
         wp_send_json_success(['message' => __('Borrador guardado', 'apisunatv2')]);
     }
 
+    public static function ajaxGreCheckStatus(): void {
+        self::authorize();
+        $order = self::getOrderFromRequest();
+        if (!$order) {
+            wp_send_json_error(['message' => __('Orden no encontrada', 'apisunatv2')]);
+        }
+        \Atm\Apisunatwp\Services\ApiSunatService::checkGreStatus($order->get_id());
+        $newStatus = (string) $order->get_meta('_gre_status');
+        wp_send_json_success(['status' => $newStatus]);
+    }
+
+    public static function handleStatusCheck(array $args): void {
+        $order_id = (int) ($args['order_id'] ?? 0);
+        if ($order_id === 0) {
+            return;
+        }
+        \Atm\Apisunatwp\Services\ApiSunatService::checkGreStatus($order_id);
+    }
+
     public static function ajaxEmit(): void {
         self::authorize();
         $order = self::getOrderFromRequest();
@@ -449,7 +534,7 @@ class GREMetaBox {
             $gre_data['document_id'] = $result['documentId'] ?? '';
 
             $order->update_meta_data('_gre_data', $gre_data);
-            $order->update_meta_data('_gre_status', 'EMITIDO');
+            $order->update_meta_data('_gre_status', 'PENDIENTE');
             $order->update_meta_data('_gre_document_id', $result['documentId'] ?? '');
             $order->update_meta_data('_gre_number', $result['numero'] ?? '');
             $order->save();
@@ -459,8 +544,18 @@ class GREMetaBox {
                 $result['numero'] ?? ''
             ));
 
+            if (function_exists('as_schedule_single_action')) {
+                as_schedule_single_action(
+                    time() + 180,
+                    'apisunat_check_gre_status',
+                    ['order_id' => $order->get_id()],
+                    'apisunatv2',
+                    true
+                );
+            }
+
             wp_send_json_success([
-                'message' => __('GRE emitida correctamente', 'apisunatv2'),
+                'message' => __('GRE enviada, pendiente de confirmación', 'apisunatv2'),
                 'numero'  => $result['numero'] ?? '',
             ]);
         } catch (\Throwable $e) {

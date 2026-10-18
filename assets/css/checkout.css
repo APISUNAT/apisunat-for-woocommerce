@@ -1,0 +1,21 @@
+.apisunat-search-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-left: 6px;
+    vertical-align: middle;
+    cursor: pointer;
+    position: relative;
+    color: #666;
+}
+.apisunat-search-icon::before {
+    content: '\1F50D';
+    font-size: 16px;
+    line-height: 1;
+}
+.apisunat-search-icon.apisunat-loading {
+    animation: apisunat-spin 0.7s linear infinite;
+}
+@keyframes apisunat-spin {
+    to { transform: rotate(360deg); }
+}

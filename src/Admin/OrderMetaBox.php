@@ -38,6 +38,9 @@ class OrderMetaBox {
             return;
         }
 
+        $savedConfig = get_option(Options::OPTION_KEY . '_detraction', null);
+        $globalConfig = is_array($savedConfig) ? $savedConfig : [];
+
         $branchDetraction = [];
         $branchKey = Options::getValue('settings.multi_branch_key', '');
         if ($branchKey !== '') {
@@ -49,17 +52,18 @@ class OrderMetaBox {
                 }
             }
         }
-        $branchDetraction = $branchDetraction + (array) Options::getValue('detraction', []);
+        $defaults = $branchDetraction + $globalConfig;
 
         $enabled         = (string) $order->get_meta('_billing_apisunat_detraction_enabled') === '1';
-        $detraction_type = (string) ($order->get_meta('_billing_apisunat_detraction_tipo') ?: ($branchDetraction['detraction_type'] ?? ''));
-        $percentage      = (string) ($order->get_meta('_billing_apisunat_detraction_percentage') ?: ($branchDetraction['percentage'] ?? 12));
-        $payment_method   = (string) ($order->get_meta('_billing_apisunat_detraction_payment_method') ?: ($branchDetraction['payment_method'] ?? '001'));
-        $cuenta_banco    = (string) ($order->get_meta('_billing_apisunat_detraction_cuenta_banco') ?: ($branchDetraction['bank_account'] ?? ''));
+        $detraction_type = (string) ($order->get_meta('_billing_apisunat_detraction_tipo') ?: ($defaults['detraction_type'] ?? ''));
+        $percentage      = (string) ($order->get_meta('_billing_apisunat_detraction_percentage') ?: ($defaults['percentage'] ?? ''));
+        $payment_method   = (string) ($order->get_meta('_billing_apisunat_detraction_payment_method') ?: ($defaults['payment_method'] ?? ''));
+        $cuenta_banco    = (string) ($order->get_meta('_billing_apisunat_detraction_cuenta_banco') ?: ($defaults['bank_account'] ?? ''));
         $monto_total     = $order->get_meta('_billing_apisunat_detraction_monto_total');
         $order_total     = (float) $order->get_total();
-        $monto_default   = $order_total > 0 && $percentage > 0 ? round($order_total * (float) $percentage / 100, 2) : 0;
-        $monto_total     = $monto_total !== '' ? (string) $monto_total : (string) $monto_default;
+        $pctVal          = $percentage !== '' ? (float) $percentage : 0;
+        $monto_default   = $order_total > 0 && $pctVal > 0 ? round($order_total * $pctVal / 100, 2) : 0;
+        $monto_total     = $monto_total !== '' ? (string) $monto_total : (string) number_format((float) $monto_default, 2, '.', '');
 
         $tipos_de_detraction = Catalogs::tiposDeDetraction();
         $medios_de_pago      = Catalogs::mediosDePago();
@@ -89,46 +93,72 @@ class OrderMetaBox {
             </p>
             <p class="form-field form-field-wide">
                 <label for="_billing_apisunat_detraction_percentage"><?= esc_html__('% Detracción', 'apisunatv2') ?></label>
-                <input type="number" id="_billing_apisunat_detraction_percentage" name="_billing_apisunat_detraction_percentage" value="<?= esc_attr($percentage) ?>" step="0.01" min="0" max="100">
+                <input type="number" id="_billing_apisunat_detraction_percentage" name="_billing_apisunat_detraction_percentage" value="<?= esc_attr($percentage) ?>" step="1" min="0" max="100" inputmode="numeric" pattern="[0-9]*">
             </p>
             <p class="form-field form-field-wide">
                 <label for="_billing_apisunat_detraction_cuenta_banco"><?= esc_html__('Cuenta bancaria', 'apisunatv2') ?></label>
                 <input type="text" id="_billing_apisunat_detraction_cuenta_banco" name="_billing_apisunat_detraction_cuenta_banco" value="<?= esc_attr($cuenta_banco) ?>" placeholder="<?= esc_attr__('00-000-000000', 'apisunatv2') ?>">
             </p>
             <p class="form-field form-field-wide">
-                <label for="_billing_apisunat_detraction_monto_total"><?= esc_html__('Monto total', 'apisunatv2') ?></label>
-                <input type="number" id="_billing_apisunat_detraction_monto_total" name="_billing_apisunat_detraction_monto_total" value="<?= esc_attr($monto_total) ?>" step="0.01" min="0">
+                <label for="_billing_apisunat_detraction_monto_total"><?= esc_html__('Monto total (S/)', 'apisunatv2') ?></label>
+                <span style="display:inline-flex;align-items:center;gap:2px;width:100%;">
+                    <span style="font-weight:600;font-size:14px;">S/</span>
+                    <input type="number" id="_billing_apisunat_detraction_monto_total" name="_billing_apisunat_detraction_monto_total" value="<?= esc_attr($monto_total) ?>" step="0.01" min="0" style="flex:1;">
+                </span>
             </p>
         </div>
         <script>
         (function() {
+            var defaults = {
+                detraction_type: '<?= esc_js($defaults['detraction_type'] ?? '') ?>',
+                percentage: '<?= esc_js($defaults['percentage'] ?? '') ?>',
+                payment_method: '<?= esc_js($defaults['payment_method'] ?? '') ?>',
+                bank_account: '<?= esc_js($defaults['bank_account'] ?? '') ?>',
+            };
             var checkbox = document.getElementById('_billing_apisunat_detraction_enabled');
             var fields = document.getElementById('sunat_detraction_fields');
             if (checkbox && fields) {
                 checkbox.addEventListener('change', function() {
                     fields.style.display = this.checked ? '' : 'none';
+                    if (this.checked) {
+                        var tipo = document.getElementById('_billing_apisunat_detraction_tipo');
+                        var pct = document.getElementById('_billing_apisunat_detraction_percentage');
+                        var method = document.getElementById('_billing_apisunat_detraction_payment_method');
+                        var banco = document.getElementById('_billing_apisunat_detraction_cuenta_banco');
+                        if (tipo) tipo.value = defaults.detraction_type;
+                        if (pct) pct.value = defaults.percentage;
+                        if (method) method.value = defaults.payment_method;
+                        if (banco) banco.value = defaults.bank_account;
+                        if (tipo) {
+                            var evt = document.createEvent('HTMLEvents');
+                            evt.initEvent('change', true, false);
+                            tipo.dispatchEvent(evt);
+                        }
+                    }
                 });
             }
             var tipo = document.getElementById('_billing_apisunat_detraction_tipo');
             var pct = document.getElementById('_billing_apisunat_detraction_percentage');
             var monto = document.getElementById('_billing_apisunat_detraction_monto_total');
+            var total = <?= (float) $order_total ?>;
+            function recalcMonto() {
+                var pctVal = parseInt(pct.value, 10) || 0;
+                monto.value = total > 0 && pctVal > 0 ? (total * pctVal / 100).toFixed(2) : '0.00';
+            }
             if (tipo && pct) {
                 tipo.addEventListener('change', function() {
                     var opt = this.options[this.selectedIndex];
                     if (opt && opt.dataset.percent) {
                         pct.value = opt.dataset.percent;
-                        pct.dispatchEvent(new Event('change'));
+                    } else {
+                        pct.value = '';
                     }
+                    recalcMonto();
                 });
             }
             if (pct && monto) {
-                pct.addEventListener('change', function() {
-                    if (monto.value === '' || parseFloat(monto.value) === 0) {
-                        var total = <?= (float) $order_total ?>;
-                        var pctVal = parseFloat(this.value) || 0;
-                        monto.value = total > 0 && pctVal > 0 ? (total * pctVal / 100).toFixed(2) : '';
-                    }
-                });
+                pct.addEventListener('input', recalcMonto);
+                pct.addEventListener('change', recalcMonto);
             }
         })();
         </script>
@@ -187,6 +217,7 @@ class OrderMetaBox {
         $docType  = (string) ($order->get_meta('_billing_apisunat_cpe_type') ?: '03');
         $idType   = (string) ($order->get_meta('_billing_apisunat_id_type') ?: '1');
         $idNumber = (string) $order->get_meta('_billing_apisunat_id_number');
+        $creditCuotas = (string) $order->get_meta('_billing_apisunat_credit_cuotas');
 
         $cpeOptions = ['03' => __('Boleta', 'apisunatv2'), '01' => __('Factura', 'apisunatv2')];
         $idOptions  = [
@@ -224,9 +255,85 @@ class OrderMetaBox {
             </p>
             <p class="form-field form-field-wide">
                 <label for="_billing_apisunat_id_number"><?= esc_html__('Nº Doc.', 'apisunatv2') ?>:</label>
-                <input type="text" id="_billing_apisunat_id_number" name="_billing_apisunat_id_number" value="<?= esc_attr($idNumber) ?>">
+                <span style="display:inline-flex;align-items:center;gap:4px;width:100%;">
+                    <input type="text" id="_billing_apisunat_id_number" name="_billing_apisunat_id_number" value="<?= esc_attr($idNumber) ?>" style="flex:1;">
+                    <span class="apisunat-search-icon" id="admin-doc-search" title="<?= esc_attr__('Consultar', 'apisunatv2') ?>"></span>
+                </span>
             </p>
+            <div id="sunat_credit_section" class="form-field form-field-wide" style="<?= $docType === '01' ? '' : 'display:none;' ?>">
+                <label>
+                    <input type="checkbox" id="_billing_apisunat_credit_enabled" name="_billing_apisunat_credit_enabled" value="1" <?php checked($creditCuotas !== ''); ?>>
+                    <?= esc_html__('Pago al Crédito', 'apisunatv2') ?>
+                </label>
+                <div id="sunat_credit_cuotas" style="<?= $creditCuotas !== '' ? 'margin-top:6px;' : 'display:none;margin-top:6px;' ?>">
+                    <label for="_billing_apisunat_credit_cuotas"><?= esc_html__('N° de Cuotas', 'apisunatv2') ?>:</label>
+                    <input type="number" id="_billing_apisunat_credit_cuotas" name="_billing_apisunat_credit_cuotas" value="<?= esc_attr($creditCuotas ?: '1') ?>" min="1" step="1" style="width:80px;">
+                </div>
+            </div>
         </div>
+        <script>
+        (function() {
+            var cpe = document.getElementById('_billing_apisunat_cpe_type');
+            var creditSection = document.getElementById('sunat_credit_section');
+            var creditCheck = document.getElementById('_billing_apisunat_credit_enabled');
+            var creditCuotas = document.getElementById('sunat_credit_cuotas');
+            if (cpe && creditSection) {
+                cpe.addEventListener('change', function() {
+                    creditSection.style.display = this.value === '01' ? '' : 'none';
+                });
+            }
+            if (creditCheck && creditCuotas) {
+                creditCheck.addEventListener('change', function() {
+                    creditCuotas.style.display = this.checked ? '' : 'none';
+                });
+            }
+            // Doc search icon
+            var docSearch = document.getElementById('admin-doc-search');
+            var docType = document.getElementById('_billing_apisunat_id_type');
+            var docNum = document.getElementById('_billing_apisunat_id_number');
+            if (docSearch && docType && docNum) {
+                docSearch.addEventListener('click', function() {
+                    var t = docType.value;
+                    var n = docNum.value.trim();
+                    if (!t || !n) return;
+                    if ((t === '6' && !/^\d{11}$/.test(n)) || (t === '1' && !/^\d{8}$/.test(n))) return;
+                    var icon = this;
+                    icon.classList.add('apisunat-loading');
+                    var data = new FormData();
+                    data.append('action', 'apisunat_consult_document');
+                    data.append('doc_type', t);
+                    data.append('doc_number', n);
+                    data.append('nonce', '<?= esc_js(wp_create_nonce(\Atm\Apisunatwp\Hooks\CheckoutHooks::NONCE_ACTION)) ?>');
+                    fetch(ajaxurl, { method: 'POST', body: data })
+                        .then(function(r) { return r.json(); })
+                        .then(function(res) {
+                            if (res && res.success && res.data) {
+                                var d = res.data;
+                                if (d.name) {
+                                    if (t === '6') {
+                                        var co = document.getElementById('billing_company');
+                                        if (co) co.value = d.name;
+                                    } else {
+                                        var parts = d.name.split(' ');
+                                        var fn = document.getElementById('billing_first_name');
+                                        var ln = document.getElementById('billing_last_name');
+                                        if (fn) fn.value = parts.shift() || '';
+                                        if (ln) ln.value = parts.join(' ');
+                                    }
+                                }
+                                if (d.address) {
+                                    var addr = document.getElementById('billing_address_1');
+                                    if (addr) addr.value = d.address;
+                                }
+                            }
+                        })
+                        .finally(function() {
+                            icon.classList.remove('apisunat-loading');
+                        });
+                });
+            }
+        })();
+        </script>
         <?php
     }
 
@@ -260,6 +367,12 @@ class OrderMetaBox {
         }
         if (isset($_POST['_billing_apisunat_detraction_monto_total'])) {
             $order->update_meta_data('_billing_apisunat_detraction_monto_total', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraction_monto_total'])));
+        }
+
+        if (isset($_POST['_billing_apisunat_credit_cuotas']) && !empty($_POST['_billing_apisunat_credit_enabled'])) {
+            $order->update_meta_data('_billing_apisunat_credit_cuotas', absint($_POST['_billing_apisunat_credit_cuotas']));
+        } else {
+            $order->delete_meta_data('_billing_apisunat_credit_cuotas');
         }
 
         $order->save();
