@@ -13,10 +13,12 @@ if (file_exists(__DIR__ . '/vendor/autoload.php')) {
 $options = [
     'apisunatv2_settings',
     'apisunatv2_settings_api',
-    'apisunatv2_settings_emision',
+    'apisunatv2_settings_issue',
     'apisunatv2_settings_advanced',
-    'apisunatv2_settings_detraccion',
-    'apisunatv2_settings_impuestos',
+    'apisunatv2_settings_settings',
+    'apisunatv2_settings_detraction',
+    'apisunatv2_settings_branches',
+    'apisunatv2_branch_index',
     'apisunat_tax_setup_done'
 ];
 
@@ -24,6 +26,14 @@ foreach ($options as $option) {
     delete_option($option);
     delete_site_option($option);
 }
+
+global $wpdb;
+$wpdb->query(
+    $wpdb->prepare(
+        "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+        $wpdb->esc_like('apisunatv2_branch_') . '%'
+    )
+);
 
 
 /* TODO evaluar si es necesario eliminar datos adicionales como logs, meta keys, etc.

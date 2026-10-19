@@ -12,13 +12,13 @@ class LogViewer {
 
     public static function addPage(): void {
         // Solo mostrar si el debug está activado
-        if (!\Atm\Apisunatwp\Config\Options::getValue('advanced.debug', false)) {
+        if (!\Atm\Apisunatwp\Config\Options::getValue('settings.debug', false)) {
             return;
         }
 
         add_submenu_page(
             'woocommerce',
-            __('Logs API Sunat', 'apisunatv2'),
+            __('Logs APISUNAT', 'apisunatv2'),
             __('Logs', 'apisunatv2'),
             'manage_woocommerce',
             'apisunatv2-logs',

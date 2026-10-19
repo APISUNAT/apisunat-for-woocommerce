@@ -21,9 +21,15 @@ class TaxMapper {
         if ($tax_class === '') {
             return '';
         }
-        $slug = sanitize_title($tax_class);
-        $mapping = Options::getValue('impuestos.afectacion_mapping', []);
-        $stored = $mapping[$slug] ?? Options::getValue('impuestos.tipo_tributo', 'gravado18');
+        $rateMapping = Options::getValue('settings.tax_rate_mapping', []);
+        $rates = \WC_Tax::get_rates_for_tax_class($tax_class);
+        foreach ($rates as $rate) {
+            if (isset($rateMapping[$rate->tax_rate_id])) {
+                $stored = $rateMapping[$rate->tax_rate_id];
+                return self::$slugToSunat[$stored] ?? self::GRAVADO;
+            }
+        }
+        $stored = Options::getValue('issue.default_tax_type', 'gravado18');
         return self::$slugToSunat[$stored] ?? self::GRAVADO;
     }
 }

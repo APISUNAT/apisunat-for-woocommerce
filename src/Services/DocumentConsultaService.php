@@ -6,7 +6,7 @@ use Atm\Apisunatwp\Logging\Logger;
 
 class DocumentConsultaService {
 
-    private const CONSULTA_URL = 'https://api.apisunat.com/v1';
+    private const BASE_URL = 'https://back.apisunat.com/personas';
     private const TIMEOUT = 15;
 
     public static function consultRuc(string $ruc): ?array {
@@ -14,19 +14,20 @@ class DocumentConsultaService {
             return null;
         }
 
-        $data = self::fetch('/ruc/' . $ruc);
-        if (!$data || !isset($data['razonSocial'])) {
+        $data = self::fetch('getRUC', ['ruc' => $ruc]);
+        if (!$data || empty($data['nombre'])) {
             return null;
         }
 
         Logger::instance()->info('RUC consulted', ['ruc' => $ruc]);
 
+        $domicilio = $data['domicilio'] ?? [];
+
         return [
-            'name'     => (string) ($data['razonSocial']    ?? ''),
-            'trade'    => (string) ($data['nombreComercial'] ?? ''),
-            'address'  => (string) ($data['direccion']      ?? ''),
-            'district' => (string) ($data['distrito']       ?? ''),
-            'state'    => (string) ($data['departamento']   ?? ''),
+            'name'     => (string) ($data['nombre'] ?? ''),
+            'address'  => (string) ($domicilio['direccion'] ?? ''),
+            'district' => (string) ($domicilio['distrito'] ?? ''),
+            'state'    => (string) ($domicilio['departamento'] ?? ''),
         ];
     }
 
@@ -35,42 +36,65 @@ class DocumentConsultaService {
             return null;
         }
 
-        $data = self::fetch('/dni/' . $dni);
-        if (!$data || (!isset($data['nombre']) && !isset($data['nombres']))) {
+        $data = self::fetch('getDNI', ['dni' => $dni]);
+        if (!$data || empty($data['nombre'])) {
             return null;
         }
 
         Logger::instance()->info('DNI consulted', ['dni' => $dni]);
 
         $name = trim(
-            ($data['nombres']         ?? '') . ' ' .
-            ($data['apellidoPaterno'] ?? '') . ' ' .
-            ($data['apellidoMaterno'] ?? '')
+            ($data['nombre']           ?? '') . ' ' .
+            ($data['apellido_paterno'] ?? '') . ' ' .
+            ($data['apellido_materno'] ?? '')
         );
 
-        return ['name' => $name];
+        $domicilio = $data['domicilio'] ?? [];
+
+        return [
+            'name'     => $name,
+            'address'  => (string) ($domicilio['direccion'] ?? ''),
+            'district' => (string) ($domicilio['distrito'] ?? ''),
+            'state'    => (string) ($domicilio['departamento'] ?? ''),
+        ];
     }
 
-    private static function fetch(string $path): ?array {
+    private static function fetch(string $endpoint, array $params): ?array {
         $branch = Options::resolveBranch();
-        $token  = $branch['persona_token'];
-        if (!$token) {
+        $personaId    = $branch['personaId'] ?? '';
+        $personaToken = $branch['personaToken'] ?? '';
+
+        if (!$personaId || !$personaToken) {
+            Logger::instance()->error('Missing persona credentials for document consult');
             return null;
         }
 
-        $response = wp_remote_get(self::CONSULTA_URL . $path, [
+        $url = self::BASE_URL . '/' . rawurlencode($personaId) . '/' . $endpoint;
+        $url = add_query_arg($params + ['personaToken' => $personaToken], $url);
+
+        $response = wp_remote_get($url, [
             'timeout' => self::TIMEOUT,
-            'headers' => ['Authorization' => 'Bearer ' . $token],
         ]);
 
         if (is_wp_error($response)) {
-            return null;
-        }
-        if ((int) wp_remote_retrieve_response_code($response) !== 200) {
+            Logger::instance()->error('Document consult HTTP error', [
+                'endpoint' => $endpoint,
+                'error'    => $response->get_error_message(),
+            ]);
             return null;
         }
 
-        $data = json_decode((string) wp_remote_retrieve_body($response), true);
-        return is_array($data) ? $data : null;
+        $code = (int) wp_remote_retrieve_response_code($response);
+        if ($code !== 200) {
+            Logger::instance()->warning('Document consult non-200', ['endpoint' => $endpoint, 'code' => $code]);
+            return null;
+        }
+
+        $body = json_decode((string) wp_remote_retrieve_body($response), true);
+        if (!is_array($body) || empty($body['success']) || empty($body['data'])) {
+            return null;
+        }
+
+        return $body['data'];
     }
 }

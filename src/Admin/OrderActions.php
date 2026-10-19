@@ -1,6 +1,7 @@
 <?php
 namespace Atm\Apisunatwp\Admin;
 
+use Atm\Apisunatwp\Jobs\SendOrderJob;
 use Atm\Apisunatwp\Services\ApiSunatService;
 
 class OrderActions {
@@ -47,15 +48,15 @@ class OrderActions {
             wp_send_json_error(['message' => __('Orden no encontrada', 'apisunatv2')]);
         }
 
-        $order->update_meta_data('_billing_apisunat_detraccion_enabled', isset($_POST['_billing_apisunat_detraccion_enabled']) ? '1' : '0');
-        if (isset($_POST['_billing_apisunat_detraccion_tipo'])) {
-            $order->update_meta_data('_billing_apisunat_detraccion_tipo', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraccion_tipo'])));
+        $order->update_meta_data('_billing_apisunat_detraction_enabled', isset($_POST['_billing_apisunat_detraction_enabled']) ? '1' : '0');
+        if (isset($_POST['_billing_apisunat_detraction_tipo'])) {
+            $order->update_meta_data('_billing_apisunat_detraction_tipo', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraction_tipo'])));
         }
-        if (isset($_POST['_billing_apisunat_detraccion_medio_de_pago'])) {
-            $order->update_meta_data('_billing_apisunat_detraccion_medio_de_pago', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraccion_medio_de_pago'])));
+        if (isset($_POST['_billing_apisunat_detraction_payment_method'])) {
+            $order->update_meta_data('_billing_apisunat_detraction_payment_method', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraction_payment_method'])));
         }
-        if (isset($_POST['_billing_apisunat_detraccion_porcentaje'])) {
-            $order->update_meta_data('_billing_apisunat_detraccion_porcentaje', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraccion_porcentaje'])));
+        if (isset($_POST['_billing_apisunat_detraction_percentage'])) {
+            $order->update_meta_data('_billing_apisunat_detraction_percentage', sanitize_text_field(wp_unslash($_POST['_billing_apisunat_detraction_percentage'])));
         }
         $order->save();
 
@@ -128,14 +129,16 @@ class OrderActions {
             return $redirect;
         }
 
-        $ok    = 0;
-        $fail  = 0;
-        $skipped = 0;
+        if (!function_exists('as_enqueue_async_action')) {
+            return $redirect;
+        }
+
+        $enqueued = 0;
+        $skipped  = 0;
 
         foreach ($ids as $id) {
             $order = wc_get_order($id);
             if (!$order) {
-                $fail++;
                 continue;
             }
 
@@ -145,29 +148,27 @@ class OrderActions {
                 continue;
             }
 
-            try {
-                ApiSunatService::send($id);
-                $ok++;
-            } catch (\Throwable) {
-                $fail++;
-            }
+            as_enqueue_async_action(SendOrderJob::ACTION, ['order_id' => (int) $id], SendOrderJob::GROUP);
+            $enqueued++;
         }
 
-        return add_query_arg(['sunat_ok' => $ok, 'sunat_fail' => $fail, 'sunat_skip' => $skipped], $redirect);
+        return add_query_arg(['sunat_ok' => $enqueued, 'sunat_skip' => $skipped], $redirect);
     }
 
     public static function bulkNotice(): void {
-        if (!isset($_GET['sunat_ok']) && !isset($_GET['sunat_fail']) && !isset($_GET['sunat_skip'])) {
+        if (!isset($_GET['sunat_ok']) && !isset($_GET['sunat_skip'])) {
             return;
         }
-        $ok     = isset($_GET['sunat_ok'])    ? absint($_GET['sunat_ok'])    : 0;
-        $fail   = isset($_GET['sunat_fail'])  ? absint($_GET['sunat_fail'])  : 0;
+        $ok      = isset($_GET['sunat_ok'])   ? absint($_GET['sunat_ok'])   : 0;
         $skipped = isset($_GET['sunat_skip']) ? absint($_GET['sunat_skip']) : 0;
 
         $parts = [];
-        if ($ok > 0)     $parts[] = sprintf(__('%d emitidos', 'apisunatv2'), $ok);
-        if ($fail > 0)   $parts[] = sprintf(__('%d fallidos', 'apisunatv2'), $fail);
+        if ($ok > 0)      $parts[] = sprintf(__('%d encolados para emitir', 'apisunatv2'), $ok);
         if ($skipped > 0) $parts[] = sprintf(__('%d omitidos (ya emitidos)', 'apisunatv2'), $skipped);
+
+        if (empty($parts)) {
+            return;
+        }
 
         printf(
             '<div class="updated"><p>%s</p></div>',

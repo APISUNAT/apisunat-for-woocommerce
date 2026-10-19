@@ -8,11 +8,10 @@ use Atm\Apisunatwp\Exceptions\InvalidOrderException;
 use Atm\Apisunatwp\Exceptions\MissingCredentialsException;
 use Atm\Apisunatwp\Logging\Logger;
 use Atm\Apisunatwp\Mappers\OrderMapper;
-use Atm\Apisunatwp\Mappers\TaxMapper;
 
 class ApiSunatService {
 
-    public const API_URL  = 'https://ecommerces-api.apisunat.com/v1.2/woocommerce';
+    public const API_URL  = 'https://ecommerces-api.apisunat.com/woocommerce/v2';
     public const BASE_URL = 'https://back.apisunat.com';
 
     private const POST_TIMEOUT = 45;
@@ -80,25 +79,25 @@ class ApiSunatService {
             }
 
             $branch = Options::resolveBranch($order);
-            if (empty($branch['persona_id']) || empty($branch['persona_token'])) {
+            if (empty($branch['personaId']) || empty($branch['personaToken'])) {
                 throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
             }
 
             if (!self::hasRequiredDocument($order)) {
-                $order->add_order_note(__('API Sunat: Documento del cliente requerido. Completa los campos en el panel lateral del pedido.', 'apisunatv2'));
+                $order->add_order_note(__('APISUNAT: Documento del cliente requerido. Completa los campos en el panel lateral del pedido.', 'apisunatv2'));
                 self::logger()->error('Missing customer document', ['order_id' => $order_id]);
-                throw new \RuntimeException(__('Documento del cliente requerido. Completa el panel "API Sunat" en el pedido.', 'apisunatv2'));
+                throw new \RuntimeException(__('Documento del cliente requerido. Completa el panel "APISUNAT" en el pedido.', 'apisunatv2'));
             }
 
-            $payload  = self::buildPayload($order, $branch);
+            $payload  = self::buildPayload($order);
 
-            if (Options::getValue('advanced.debug')) {
+            if (Options::getValue('settings.debug')) {
                 self::logger()->debug('CPE Payload', ['order_id' => $order_id, 'payload' => $payload]);
             }
 
             $response = self::request('POST', self::API_URL, $payload);
 
-            if (Options::getValue('advanced.debug')) {
+            if (Options::getValue('settings.debug')) {
                 self::logger()->debug('CPE Response', ['order_id' => $order_id, 'response' => $response]);
             }
 
@@ -132,27 +131,24 @@ class ApiSunatService {
         self::logger()->info('Voiding CPE', ['order_id' => $order_id, 'doc_id' => $docId]);
 
         $branch = Options::resolveBranch($order);
-        if (empty($branch['persona_id']) || empty($branch['persona_token'])) {
+        if (empty($branch['personaId']) || empty($branch['personaToken'])) {
             throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
         }
 
-        $payload = self::buildPayload($order, $branch);
-        $branchSeries = $branch['series'] ?? [];
-        $payload['plugin_data']['serie07F'] = !empty($branchSeries['nota_credito_factura']) ? $branchSeries['nota_credito_factura'] : (string) Options::getValue('emision.series.nota_credito_factura', 'FC01');
-        $payload['plugin_data']['serie07B'] = !empty($branchSeries['nota_credito_boleta']) ? $branchSeries['nota_credito_boleta'] : (string) Options::getValue('emision.series.nota_credito_boleta', 'BC01');
+        $payload = self::buildPayload($order);
         $payload['document_data'] = [
             'reason'         => $reason,
             'documentId'     => $docId,
             'customer_email' => $order->get_billing_email(),
         ];
 
-        if (Options::getValue('advanced.debug')) {
+        if (Options::getValue('settings.debug')) {
             self::logger()->debug('Void Payload', ['order_id' => $order_id, 'doc_id' => $docId, 'payload' => $payload]);
         }
 
         $response = self::request('POST', self::API_URL . '/' . rawurlencode($docId), $payload);
 
-        if (Options::getValue('advanced.debug')) {
+        if (Options::getValue('settings.debug')) {
             self::logger()->debug('Void Response', ['order_id' => $order_id, 'doc_id' => $docId, 'response' => $response]);
         }
 
@@ -220,27 +216,42 @@ class ApiSunatService {
         }
     }
 
-    private static function buildPayload(\WC_Order $order, array $branch): array {
-        $mapped = OrderMapper::map($order);
+    private static function buildPayload(\WC_Order $order): array {
+        //$mapped = OrderMapper::map($order);
 
-        $tax_classes = self::getTaxClassesMap();
+        //$tax_classes = self::getTaxClassesMap();
         $items_data = [];
-        foreach ($order->get_items() as $item) {
+        /*foreach ($order->get_items() as $item) {
             $product = $item instanceof \WC_Order_Item_Product ? $item->get_product() : null;
-            $tax_class = $product ? $product->get_tax_class() : '';
+            //$tax_class = $product ? $product->get_tax_class() : '';
             $items_data[] = [
                 'item'          => $item->get_data(),
                 'product'       => $product ? $product->get_data() : [],
-                'tax_class'     => $tax_class,
-                'tax_class_slug' => sanitize_title($tax_class),
-                'tax_info'      => $tax_classes[$tax_class] ?? $tax_classes[''] ?? null,
-                'taxes'         => $item->get_taxes(),
+            ];
+        }*/
+
+        foreach ($order->get_items('line_item') as $item) {
+            $product = $item instanceof \WC_Order_Item_Product
+                ? $item->get_product()
+                : null;
+
+            $items_data[] = [
+                'type'    => 'product',
+                'item'    => $item->get_data(),
+                'product' => $product ? $product->get_data() : [],
+            ];
+        }
+
+        foreach ($order->get_items('shipping') as $shipping_item) {
+            $items_data[] = [
+                'type' => 'shipping',
+                'item' => $shipping_item->get_data(),
             ];
         }
 
         $order_data = $order->get_data();
 
-        $excluded_meta = [
+        /*$excluded_meta = [
             '_apisunat_request',
             '_apisunat_response',
             '_apisunat_response_code',
@@ -252,13 +263,35 @@ class ApiSunatService {
                 $key = $meta->key ?? ($meta['key'] ?? '');
                 return !in_array($key, $excluded_meta, true);
             }
-        ));
+        ));*/
+
+        $forms = [];
+        $detractionData = [
+            'enabled'          => (string) $order->get_meta('_billing_apisunat_detraction_enabled') === '1',
+            'tipo'             => $order->get_meta('_billing_apisunat_detraction_tipo'),
+            'percentage'       => $order->get_meta('_billing_apisunat_detraction_percentage'),
+            'payment_method'   => $order->get_meta('_billing_apisunat_detraction_payment_method'),
+            'cuenta_banco'     => $order->get_meta('_billing_apisunat_detraction_cuenta_banco'),
+            'monto_total'      => $order->get_meta('_billing_apisunat_detraction_monto_total'),
+        ];
+        if ($detractionData['enabled'] || !empty($detractionData['tipo'])) {
+            $forms['detraction'] = $detractionData;
+        }
 
         return [
-            'plugin_data' => self::pluginConfig($branch),
+            'plugin_data' => array_merge(self::pluginConfig(), ['forms' => $forms]),
             'order_data'  => $order_data,
             'items_data'  => $items_data,
             'tax_data'    => self::getRawTaxData($order),
+            'wc_settings' => [
+                'calc_taxes'          => get_option('woocommerce_calc_taxes', 'no'),
+                'prices_include_tax'  => get_option('woocommerce_prices_include_tax', 'no'),
+                'tax_based_on'        => get_option('woocommerce_tax_based_on', 'shipping'),
+                'shipping_tax_class'  => get_option('woocommerce_shipping_tax_class', ''),
+                'tax_round_at_subtotal' => get_option('woocommerce_tax_round_at_subtotal', 'no'),
+                'tax_display_shop'    => get_option('woocommerce_tax_display_shop', 'excl'),
+                'tax_display_cart'    => get_option('woocommerce_tax_display_cart', 'excl'),
+            ],
             // 'order'       => $mapped, TODO for the future specific map
         ];
     }
@@ -292,51 +325,53 @@ class ApiSunatService {
         return $map;
     }
 
-private static function pluginConfig(array $branch): array {
-        $branchSeries = $branch['series'] ?? [];
+    private static function pluginConfig(): array {
+        $config   = Options::get();
+        $settings = $config['settings'] ?? [];
+        $branches = $config['branches'] ?? [];
 
-        $serieFactura = !empty($branchSeries['factura']) ? $branchSeries['factura'] : (string) Options::getValue('emision.series.factura', 'F001');
-        $serieBoleta  = !empty($branchSeries['boleta']) ? $branchSeries['boleta'] : (string) Options::getValue('emision.series.boleta', 'B001');
-        $serieNCFactura = !empty($branchSeries['nota_credito_factura']) ? $branchSeries['nota_credito_factura'] : (string) Options::getValue('emision.series.nota_credito_factura', 'FC01');
-        $serieNCBoleta = !empty($branchSeries['nota_credito_boleta']) ? $branchSeries['nota_credito_boleta'] : (string) Options::getValue('emision.series.nota_credito_boleta', 'BC01');
+        if (isset($settings['tax_rate_mapping']) && is_array($settings['tax_rate_mapping'])) {
+            $settings['tax_rate_mapping'] = self::enrichTaxRateMapping($settings['tax_rate_mapping']);
+        }
 
-        $mapping = Options::getValue('advanced.checkout_mapping', []);
+        if (empty($settings['multi_branch'])) {
+            $firstBranch = $branches[0] ?? [];
+            $firstBranch['api']        = ($firstBranch['api'] ?? []) + ($config['api'] ?? []);
+            $firstBranch['issue']      = ($firstBranch['issue'] ?? []) + ($config['issue'] ?? []);
+            $firstBranch['detraction'] = ($firstBranch['detraction'] ?? []) + ($config['detraction'] ?? []);
+            $firstBranch['gre']        = ($firstBranch['gre']        ?? []) + ($config['gre']        ?? []);
+            $branches = [$firstBranch];
+        }
 
         return [
-            'personaId'          => $branch['persona_id'],
-            'personaToken'       => $branch['persona_token'],
-            'noDocId'            => Options::getValue('emision.boleta_sin_info_cliente') ? 'true' : 'false',
-            'serie01'            => $serieFactura,
-            'serie03'            => $serieBoleta,
-            'serie07F'           => $serieNCFactura,
-            'serie07B'           => $serieNCBoleta,
-            'emision_modo'       => Options::getValue('emision.modo', 'manual'),
-            'emision_estado'     => Options::getValue('emision.estado_emision', 'wc-completed'),
-            'moneda'             => get_woocommerce_currency(),
-            'detraccion'         => [
-                'enabled'          => Options::getValue('detraccion.enabled', false) ? 'true' : 'false',
-                'codigo_default'   => Options::getValue('detraccion.medio_de_pago', '001'),
-                'porcentaje'       => (float) Options::getValue('detraccion.porcentaje', 12),
-                'cuenta_banco'     => Options::getValue('detraccion.cuenta_bancaria', ''),
-                'monto_minimo_soles' => \Atm\Apisunatwp\Mappers\DetraccionMapper::MONTO_MINIMO_SOLES,
-                'tipo_de_cambio'   => (string) Options::getValue('detraccion.tipo_de_cambio', ''),
-            ],
-            'checkout_meta_keys' => [
-                'tipo_comprobante' => (string) ($mapping['tipo_comprobante'] ?? '_billing_apisunat_document_type'),
-                'tipo_documento'   => (string) ($mapping['tipo_documento'] ?? '_billing_apisunat_customer_id_type'),
-                'numero_documento' => (string) ($mapping['numero_documento'] ?? '_billing_apisunat_customer_id'),
-            ],
-            'impuestos'          => [
-                'tipo_tributo' => (string) Options::getValue('impuestos.tipo_tributo', 'gravado18'),
-                'afectaciones' => Options::getValue('impuestos.afectacion_mapping', []),
-            ],
-            'branches'           => Options::getValue('api.branches', []),
-            'debug'              => Options::getValue('advanced.debug') ? 'true' : 'false',
-            'custom_meta_data'   => Options::getValue('advanced.custom_checkout') ? 'true' : 'false',
+            //'api'        => !empty($settings['multi_branch']) ? ($config['api'] ?? []) : [],
+            //'issue'      => !empty($settings['multi_branch']) ? ($config['issue'] ?? []) : [],
+            //'detraction' => !empty($settings['multi_branch']) ? ($config['detraction'] ?? []) : [],
+            'branches'   => $branches,
+            'settings'   => $settings,
         ];
     }
 
-    private static function getWcTaxRate(): string {
+    private static function enrichTaxRateMapping(array $mapping): array {
+        $rateInfo = [];
+        $classes = array_merge(['standard'], \WC_Tax::get_tax_class_slugs());
+        foreach ($classes as $class) {
+            $rates = \WC_Tax::get_rates_for_tax_class($class);
+            foreach ($rates as $rate) {
+                $rateInfo[$rate->tax_rate_id] = $class === 'standard' ? 'standard' : $class;
+            }
+        }
+
+        return array_combine(
+            array_map(static function ($rateId) use ($rateInfo): string {
+                $clase = $rateInfo[$rateId] ?? '';
+                return $clase . ',' . $rateId;
+            }, array_keys($mapping)),
+            array_values($mapping)
+        );
+    }
+
+    /*private static function getWcTaxRate(): string {
         $rates = \WC_Tax::get_rates_for_tax_class('standard');
         if (!empty($rates) && is_array($rates)) {
             $rate = reset($rates);
@@ -345,37 +380,38 @@ private static function pluginConfig(array $branch): array {
             }
         }
         return '18';
-    }
+    }*/
 
     private static function getRawTaxData(\WC_Order $order): array {
         $tax_data = [
-            'order_taxes'  => $order->get_taxes(),
+            //'order_taxes'  => $order->get_taxes(),
             'tax_totals'   => $order->get_tax_totals(),
-            'tax_lines'    => [],
-            'tax_classes'  => \WC_Tax::get_tax_classes(),
+            //'tax_lines'    => [],
+            //'tax_classes'  => \WC_Tax::get_tax_classes(),
             'all_rates'    => [],
         ];
 
-        foreach ($tax_data['tax_classes'] as $class) {
-            $slug = sanitize_title($class);
-            $rates = \WC_Tax::get_rates_for_tax_class($slug);
-            if (!empty($rates)) {
-                $tax_data['all_rates'][$slug] = array_map(function ($rate) {
-                    return [
-                        'rate'    => (string) $rate->tax_rate,
-                        'label'   => $rate->tax_rate_name,
-                        'shipping'=> $rate->tax_rate_shipping ? 'yes' : 'no',
-                        'compound'=> $rate->tax_rate_compound ? 'yes' : 'no',
-                    ];
-                }, $rates);
-            }
+        $classes = array_merge(
+            [''],
+            \WC_Tax::get_tax_classes()
+        );
+
+        foreach ($classes as $class) {
+            $rates = \WC_Tax::get_rates_for_tax_class($class);
+
+            $key = $class ?: 'standard';
+
+            $tax_data['all_rates'][$key] = array_map(
+                fn($rate) => (array) $rate,
+                $rates
+            );
         }
 
-        foreach ($order->get_items('tax') as $tax_item) {
+        /*foreach ($order->get_items('tax') as $tax_item) {
             $tax_data['tax_lines'][] = $tax_item->get_data();
-        }
+        }*/
 
-        foreach ($order->get_items() as $item) {
+        /*foreach ($order->get_items() as $item) {
             $tax_data['item_taxes'][] = [
                 'item_id'    => $item->get_id(),
                 'name'       => $item->get_name(),
@@ -383,17 +419,7 @@ private static function pluginConfig(array $branch): array {
                 'tax_status' => $item->get_tax_status(),
                 'taxes'      => $item->get_taxes(),
             ];
-        }
-
-        $tax_data['wc_settings'] = [
-            'calc_taxes'          => get_option('woocommerce_calc_taxes', 'no'),
-            'prices_include_tax'  => get_option('woocommerce_prices_include_tax', 'no'),
-            'tax_based_on'        => get_option('woocommerce_tax_based_on', 'shipping'),
-            'shipping_tax_class'  => get_option('woocommerce_shipping_tax_class', ''),
-            'tax_round_at_subtotal' => get_option('woocommerce_tax_round_at_subtotal', 'no'),
-            'tax_display_shop'    => get_option('woocommerce_tax_display_shop', 'excl'),
-            'tax_display_cart'    => get_option('woocommerce_tax_display_cart', 'excl'),
-        ];
+        }*/
 
         return $tax_data;
     }
@@ -410,7 +436,7 @@ private static function pluginConfig(array $branch): array {
             return true;
         }
 
-        if (Options::getValue('emision.boleta_sin_info_cliente', false)) {
+        if (Options::getValue('issue.no_customer_data', false)) {
             return true;
         }
 
@@ -436,7 +462,7 @@ private static function pluginConfig(array $branch): array {
 
         $response = wp_remote_request($url, $args);
 
-        if (function_exists('wc_get_order') && isset($body['order']['id'])) {
+        /*if (function_exists('wc_get_order') && isset($body['order']['id'])) {
             $order_id = $body['order']['id'];
             $order = wc_get_order($order_id);
             if ($order) {
@@ -455,7 +481,7 @@ private static function pluginConfig(array $branch): array {
                 }
                 $order->save();
             }
-        }
+        }*/
 
         if (is_wp_error($response)) {
             self::logger()->error('WP HTTP error', ['error' => $response->get_error_message()]);
@@ -495,7 +521,7 @@ private static function pluginConfig(array $branch): array {
 
         if ($status === 'ERROR') {
             $error = $response['error'] ?? $response;
-            $order->add_order_note('API Sunat Error: ' . wp_json_encode($error));
+            $order->add_order_note('APISUNAT Error: ' . wp_json_encode($error));
             self::logger()->error('API returned error', ['order_id' => $order->get_id()]);
             throw new \RuntimeException(__('Error al emitir CPE', 'apisunatv2'));
         }
@@ -535,6 +561,166 @@ private static function pluginConfig(array $branch): array {
     private static function documentNumber(string $filename): string {
         $parts = explode('-', $filename);
         return ($parts[2] ?? '') . '-' . ($parts[3] ?? '');
+    }
+
+    public static function sendGRE(int $order_id, array $gre_data): array {
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            throw new InvalidOrderException("Order #{$order_id} not found");
+        }
+
+        self::logger()->info('Sending GRE', ['order_id' => $order_id]);
+
+        $branch = Options::resolveBranch($order);
+        if (empty($branch['personaId']) || empty($branch['personaToken'])) {
+            throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
+        }
+
+        $datos = $gre_data['datos'] ?? [];
+
+        $fecha       = !empty($datos['fecha_traslado']) ? $datos['fecha_traslado'] : current_time('Y-m-d');
+        $hora        = !empty($datos['hora_traslado'])  ? $datos['hora_traslado']  : current_time('H:i:s');
+        $motivo      = !empty($datos['motivo_traslado']) ? $datos['motivo_traslado'] : '01';
+        $modalidad   = !empty($datos['modalidad_transporte']) ? $datos['modalidad_transporte'] : '01';
+
+        $vehicles = [];
+        foreach (($gre_data['vehiculos'] ?? []) as $v) {
+            $vehicles[] = [
+                'license_plate'      => $v['placa'] ?? '',
+                'authorization_number' => $v['autorizacion'] ?? '',
+                'issuing_entity'      => $v['entidad'] ?? '',
+            ];
+        }
+
+        $drivers = [];
+        foreach (($gre_data['conductores'] ?? []) as $c) {
+            $drivers[] = [
+                'document_type'   => $c['tipo_documento'] ?? '1',
+                'document_number' => $c['numero_documento'] ?? '',
+                'first_name'      => $c['nombres'] ?? '',
+                'last_name'       => $c['apellidos'] ?? '',
+                'driver_license'  => $c['licencia'] ?? '',
+            ];
+        }
+
+        $greDefaults = Options::getValue('gre', []);
+        $transportista = !empty($gre_data['transportista']) ? $gre_data['transportista'] : ($greDefaults['transportista'] ?? []);
+        $partida       = !empty($gre_data['partida'])       ? $gre_data['partida']       : ($greDefaults['partida'] ?? []);
+
+        $grePayload = [
+            'fecha_traslado'                                 => $fecha,
+            'hora_traslado'                                  => $hora,
+            'motivo_traslado'                                => $motivo,
+            'modalidad_transporte'                           => $modalidad,
+            'vehicles'                                       => $vehicles,
+            'drivers'                                        => $drivers,
+            'SUNAT_Envio_IndicadorTrasladoVehiculoM1L'       => !empty($datos['vehiculo_categoria']),
+            'carrier_party'                                  => [
+                'document_type'   => '6',
+                'document_number' => $transportista['ruc'] ?? '',
+                'name'            => $transportista['nombre'] ?? '',
+                'mtc_registration' => $transportista['registro_mtc'] ?? $transportista['mtc'] ?? '',
+            ],
+            'origin'                                         => [
+                'ubigeo'  => $partida['ubigeo'] ?? '',
+                'address' => $partida['direccion'] ?? '',
+            ],
+        ];
+
+        $forms = ['gre' => $grePayload];
+        $detractionData = [
+            'enabled'          => (string) $order->get_meta('_billing_apisunat_detraction_enabled') === '1',
+            'tipo'             => $order->get_meta('_billing_apisunat_detraction_tipo'),
+            'percentage'       => $order->get_meta('_billing_apisunat_detraction_percentage'),
+            'payment_method'   => $order->get_meta('_billing_apisunat_detraction_payment_method'),
+            'cuenta_banco'     => $order->get_meta('_billing_apisunat_detraction_cuenta_banco'),
+            'monto_total'      => $order->get_meta('_billing_apisunat_detraction_monto_total'),
+        ];
+        if ($detractionData['enabled'] || !empty($detractionData['tipo'])) {
+            $forms['detraction'] = $detractionData;
+        }
+
+        $payload = [
+            'plugin_data' => array_merge(self::pluginConfig(), ['forms' => $forms]),
+            'order_data'  => $order->get_data(),
+            'gre_data'    => $grePayload,
+        ];
+
+        self::logger()->info('GRE Payload', ['payload' => $payload]);
+
+        $response = self::request('POST', self::API_URL, $payload);
+
+        self::logger()->info('GRE response', ['order_id' => $order_id, 'response' => $response]);
+
+        if (isset($response['status']) && $response['status'] === 'ERROR') {
+            $error = $response['error'] ?? __('Error al emitir GRE', 'apisunatv2');
+            throw new \RuntimeException(is_string($error) ? $error : __('Error al emitir GRE', 'apisunatv2'));
+        }
+
+        return $response;
+    }
+
+    public static function checkGreStatus(int $order_id): void {
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return;
+        }
+
+        $docId = (string) $order->get_meta('_gre_document_id');
+        if ($docId === '') {
+            return;
+        }
+
+        try {
+            $response = self::request('GET', self::BASE_URL . '/documents/' . rawurlencode($docId) . '/getById');
+            if (isset($response['status']) && is_string($response['status'])) {
+                $newStatus = $response['status'];
+                $order->update_meta_data('_gre_status', $newStatus);
+                $order->save();
+                $order->add_order_note(sprintf(__('Estado GRE actualizado: %s', 'apisunatv2'), $newStatus));
+            }
+        } catch (\Throwable $e) {
+            self::logger()->warning('GRE status check failed', [
+                'order_id' => $order_id,
+                'error'    => $e->getMessage(),
+            ]);
+        }
+
+        $currentStatus = (string) $order->get_meta('_gre_status');
+        if ($currentStatus === 'PENDIENTE' && function_exists('as_schedule_single_action')) {
+            as_schedule_single_action(
+                time() + 120,
+                'apisunat_check_gre_status',
+                ['order_id' => $order_id],
+                'apisunatv2',
+                true
+            );
+        }
+    }
+
+    public static function voidGRE(int $order_id, string $docId, string $reason): void {
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            throw new InvalidOrderException("Order #{$order_id} not found");
+        }
+
+        self::logger()->info('Voiding GRE', ['order_id' => $order_id, 'doc_id' => $docId]);
+
+        $branch = Options::resolveBranch($order);
+        if (empty($branch['personaId']) || empty($branch['personaToken'])) {
+            throw new MissingCredentialsException(__('Credenciales API no configuradas', 'apisunatv2'));
+        }
+
+        $payload = [
+            'reason'   => $reason,
+            'plugin_data' => self::pluginConfig(),
+        ];
+
+        $response = self::request('POST', self::API_URL . '/gre/' . rawurlencode($docId) . '/void', $payload);
+
+        if (isset($response['status']) && $response['status'] === 'ERROR') {
+            throw new \RuntimeException($response['error'] ?? __('Error al anular GRE', 'apisunatv2'));
+        }
     }
 
     private static function truncate(string $value, int $max): string {

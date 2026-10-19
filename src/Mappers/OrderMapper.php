@@ -7,7 +7,7 @@ class OrderMapper {
         $created = $order->get_date_created();
         $meta    = \Atm\Apisunatwp\Config\Options::resolveCheckoutMeta($order);
 
-        $detraccion = DetraccionMapper::resolve($order, (float) $order->get_total());
+        $detraction = DetractionMapper::resolve($order, (float) $order->get_total());
 
         return [
             'id'         => $order->get_id(),
@@ -24,7 +24,7 @@ class OrderMapper {
                 'discount' => round((float) $order->get_discount_total(), 2),
                 'total'    => round((float) $order->get_total(),          2),
             ],
-            'detraccion' => $detraccion,
+            'detraction' => $detraction,
         ];
     }
 }

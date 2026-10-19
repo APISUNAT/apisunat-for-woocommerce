@@ -14,14 +14,14 @@
         var $statAccepted = $('#stat-accepted');
         var $statApi = $('#stat-api');
 
-        // Test API per branch
-        $(document).on('click', '.apisunat-test-branch', function (e) {
+        // Test API
+        $(document).on('click', '.apisunat-test-api', function (e) {
             e.preventDefault();
             var $btn = $(this);
-            var $row = $btn.closest('.branch-row');
-            var personaId = $row.find('input[name*="[persona_id]"]').val();
-            var token = $row.find('input[name*="[persona_token]"]').val();
-            var $result = $row.find('.apisunat-branch-result');
+            var $creds = $btn.closest('.apisunat-credentials');
+            var personaId = $creds.find('input[name*="[personaId]"]').val();
+            var token = $creds.find('input[name*="[personaToken]"]').val();
+            var $result = $creds.find('.apisunat-api-result');
 
             if (!personaId || !token) {
                 $result.removeClass('success error').addClass('error').text(i18n.credsMissing || '');
@@ -34,8 +34,8 @@
             $.post(ajaxUrl, {
                 action: 'apisunat_test_api',
                 nonce: nonce,
-                persona_id: personaId,
-                persona_token: token
+                personaId: personaId,
+                personaToken: token
             }).done(function (res) {
                 if (res && res.success) {
                     var msg = res.data.message + ' - ' + (res.data.persona || '');
@@ -83,6 +83,33 @@
         $syncBtn.on('click', function (e) {
             e.preventDefault();
             fetchStats(true);
+        });
+
+        var $sendPendingBtn = $('#send-pending-btn');
+        var $sendResult = $('#send-pending-result');
+
+        $sendPendingBtn.on('click', function (e) {
+            e.preventDefault();
+            var $btn = $(this);
+            $btn.prop('disabled', true);
+            $sendResult.text(i18n.sending || '');
+
+            $.post(ajaxUrl, {
+                action: 'apisunat_send_pending',
+                nonce: nonce
+            }).done(function (res) {
+                if (res && res.success) {
+                    $sendResult.removeClass('error').addClass('success').text(res.data.message);
+                    applyStats(res.data);
+                } else {
+                    var err = (res && res.data && res.data.message) || i18n.connError || '';
+                    $sendResult.removeClass('success').addClass('error').text(err);
+                }
+            }).fail(function () {
+                $sendResult.removeClass('success').addClass('error').text(i18n.connError || '');
+            }).always(function () {
+                $btn.prop('disabled', false);
+            });
         });
 
         // Enable taxes
@@ -164,10 +191,23 @@
 
         $(document).on('click', '.apisunat-toggle-token', function (e) {
             e.preventDefault();
-            var $input = $(this).closest('.branch-row').find('.apisunat-token-input');
+            var $input = $(this).siblings('.apisunat-token-input');
+            if (!$input.length) {
+                $input = $(this).closest('.apisunat-credentials').find('.apisunat-token-input');
+            }
             if (!$input.length) return;
             $input.attr('type', $input.attr('type') === 'password' ? 'text' : 'password');
         });
+
+        // Toggle multi_branch_key visibility based on multi_branch checkbox
+        var $multiBranchCb = $('#apisunatv2-settings-multi_branch');
+        var $multiBranchKeyRow = $('label[for="apisunatv2-settings-multi_branch_key"]').closest('tr');
+        if ($multiBranchCb.length && $multiBranchKeyRow.length) {
+            $multiBranchKeyRow.toggle($multiBranchCb.is(':checked'));
+            $multiBranchCb.on('change', function () {
+                $multiBranchKeyRow.toggle(this.checked);
+            });
+        }
 
         fetchStats(false);
     });

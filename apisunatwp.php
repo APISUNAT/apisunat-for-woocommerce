@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: API Sunat Wordpress
+ * Plugin Name: APISUNAT Wordpress
  * Plugin URI:  https://github.com/kamilml/apisunat-for-woocommerce
  * Description: Emite comprobantes electrónicos SUNAT desde WooCommerce con Action Scheduler.
  * Version:     2.0.0
@@ -16,14 +16,14 @@
 
 defined('ABSPATH') || exit;
 
-define('APISUNATWP_VERSION', '2.0.0');
+define('APISUNATWP_VERSION', '2.0.1');
 
 if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')), true)) {
     add_action('admin_notices', function () {
         printf(
             '<div class="notice notice-error"><p>%s</p></div>',
             wp_kses_post(__(
-                '<strong>API Sunat</strong> requiere <a href="https://wordpress.org/plugins/woocommerce/">WooCommerce</a> activado.',
+                '<strong>APISUNAT</strong> requiere <a href="https://wordpress.org/plugins/woocommerce/">WooCommerce</a> activado.',
                 'apisunatv2'
             ))
         );

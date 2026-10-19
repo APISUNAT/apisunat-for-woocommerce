@@ -44,7 +44,7 @@
 
             if (!docType.length) return;
 
-            var loading = $('<span class="apisunat-loading" aria-hidden="true"></span>');
+            var loading = $('<span class="apisunat-search-icon" aria-hidden="true"></span>');
             docNumber.parent().append(loading);
 
             function updatePlaceholders() {
@@ -68,9 +68,9 @@
                 if (!t || !n) return;
                 clearTimeout(debounce);
                 debounce = setTimeout(function () {
-                    loading.show();
+                    loading.addClass('apisunat-loading');
                     consultDocument(t, n).always(function () {
-                        loading.hide();
+                        loading.removeClass('apisunat-loading');
                     }).then(function (d) {
                         if (!d) return;
                         if (d.name) {
@@ -101,34 +101,97 @@
         var observer;
         var bound = false;
 
-        function getFieldElement(fieldId) {
-            return (
-                document.querySelector('[name="' + fieldId + '"]') ||
-                document.querySelector('[data-key="' + fieldId + '"] input, [data-key="' + fieldId + '"] select')
-            );
+        var FIELD_IDS = {
+            docType: 'apisunat/sunat_id_type',
+            docNum:  'apisunat/sunat_id_number',
+        };
+
+        function findElement(nameOrId) {
+            // Try by name, data-key, and id attributes
+            var el =
+                document.querySelector('[name="' + nameOrId + '"]') ||
+                document.querySelector('[name="order[additional][' + nameOrId + ']"]') ||
+                document.querySelector('[data-key="' + nameOrId + '"] input, [data-key="' + nameOrId + '"] select') ||
+                document.getElementById('order-' + nameOrId.replace(/\//g, '-'));
+            return el;
+        }
+
+        var searchIcon = null;
+
+        function addSearchIcon() {
+            if (searchIcon) return;
+            var docNumEl = findElement(FIELD_IDS.docNum);
+            if (!docNumEl) return;
+            searchIcon = document.createElement('span');
+            searchIcon.className = 'apisunat-search-icon';
+            searchIcon.setAttribute('aria-hidden', 'true');
+            searchIcon.style.cursor = 'pointer';
+            docNumEl.parentNode.insertBefore(searchIcon, docNumEl.nextSibling);
+            searchIcon.addEventListener('click', function () {
+                var icon = this;
+                var type = getFieldValue(FIELD_IDS.docType);
+                var num = getFieldValue(FIELD_IDS.docNum);
+                if (!type || !num) return;
+                if ((type === '6' && !/^\d{11}$/.test(num)) || (type === '1' && !/^\d{8}$/.test(num))) return;
+                icon.classList.add('apisunat-loading');
+                consultDocument(type, num).always(function () {
+                    icon.classList.remove('apisunat-loading');
+                }).then(function (d) {
+                    if (!d) return;
+                    if (d.name) {
+                        if (type === '6') {
+                            setFieldValue('billing_company', d.name);
+                        } else {
+                            var parts = d.name.split(' ');
+                            setFieldValue('billing_first_name', parts.shift());
+                            setFieldValue('billing_last_name', parts.join(' '));
+                        }
+                    }
+                    if (d.address) setFieldValue('billing_address_1', d.address);
+                    if (d.state) setFieldValue('billing_state', d.state);
+                });
+            });
         }
 
         function getFieldValue(fieldId) {
-            var el = getFieldElement(fieldId);
+            var el = findElement(fieldId);
             return el ? el.value : null;
         }
 
-        function setFieldValue(fieldId, value) {
-            var el = getFieldElement(fieldId);
-            if (el) {
+        function setNativeValue(el, value) {
+            var proto = el instanceof HTMLSelectElement
+                ? window.HTMLSelectElement.prototype
+                : window.HTMLInputElement.prototype;
+            var setter = Object.getOwnPropertyDescriptor(proto, 'value');
+            if (setter && setter.set) {
+                setter.set.call(el, value);
+            } else {
                 el.value = value;
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        function setFieldValue(fieldId, value) {
+            var el = findElement(fieldId);
+            if (!el) {
+                var mapped = fieldId.replace('billing_', '');
+                el = findElement(mapped);
+            }
+            if (el) {
+                setNativeValue(el, value);
             }
         }
 
         function consultHandler() {
-            var type = getFieldValue('apisunat-sunat_id_type');
-            var num = getFieldValue('apisunat-sunat_id_number');
+            var type = getFieldValue(FIELD_IDS.docType);
+            var num = getFieldValue(FIELD_IDS.docNum);
             if (!type || !num) return;
             clearTimeout(debounce);
             debounce = setTimeout(function () {
-                consultDocument(type, num).then(function (d) {
+                if (searchIcon) searchIcon.classList.add('apisunat-loading');
+                consultDocument(type, num).always(function () {
+                    if (searchIcon) searchIcon.classList.remove('apisunat-loading');
+                }).then(function (d) {
                     if (!d) return;
                     if (d.name) {
                         if (type === '6') {
@@ -147,11 +210,12 @@
 
         function tryBind() {
             if (bound) return true;
-            var docTypeEl = getFieldElement('apisunat-sunat_id_type');
-            var docNumEl = getFieldElement('apisunat-sunat_id_number');
+            var docTypeEl = findElement(FIELD_IDS.docType);
+            var docNumEl = findElement(FIELD_IDS.docNum);
             if (docTypeEl && docNumEl) {
                 docTypeEl.addEventListener('change', consultHandler);
                 docNumEl.addEventListener('input', consultHandler);
+                addSearchIcon();
                 bound = true;
                 return true;
             }
