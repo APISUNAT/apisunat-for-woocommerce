@@ -35,8 +35,8 @@ class Defaults {
                 'multi_branch_key'   => '',
                 'checkout_mapping' => [
                     'document_type_key'    => '_billing_apisunat_document_type',
-                    'document_type_key_value_01'             => '01',
-                    'document_type_key_value_03'             => '03',
+                    'document_type_value_01'                => '01',
+                    'document_type_value_03'                => '03',
                     'customer_id_type_key' => '_billing_apisunat_customer_id_type',
                     'customer_id_type_value_-'              => '-',
                     'customer_id_type_value_1'              => '1',
@@ -56,6 +56,8 @@ class Defaults {
             ],
             'gre' => [
                 'vehiculo_categoria' => false,
+                'motivo_traslado'    => '01',
+                'modalidad_transporte' => '01',
                 'transportista' => [
                     'nombre' => '',
                     'ruc'    => '',

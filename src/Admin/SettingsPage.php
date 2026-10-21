@@ -99,22 +99,46 @@ class SettingsPage {
 
         if (isset($input['gre']) && is_array($input['gre'])) {
             $output['gre']['vehiculo_categoria'] = !empty($input['gre']['vehiculo_categoria']);
+            $output['gre']['motivo_traslado'] = in_array(($input['gre']['motivo_traslado'] ?? ''), ['01', '03', '14'], true) ? $input['gre']['motivo_traslado'] : '01';
+            $output['gre']['modalidad_transporte'] = in_array(($input['gre']['modalidad_transporte'] ?? ''), ['01', '02'], true) ? $input['gre']['modalidad_transporte'] : '01';
             if (isset($input['gre']['transportista']) && is_array($input['gre']['transportista'])) {
                 $output['gre']['transportista']['nombre'] = sanitize_text_field((string) ($input['gre']['transportista']['nombre'] ?? ''));
                 $output['gre']['transportista']['ruc']    = sanitize_text_field((string) ($input['gre']['transportista']['ruc'] ?? ''));
                 $output['gre']['transportista']['mtc']    = sanitize_text_field((string) ($input['gre']['transportista']['mtc'] ?? ''));
             }
+            if (isset($input['gre']['vehiculo']) && is_array($input['gre']['vehiculo'])) {
+                $v = $input['gre']['vehiculo'];
+                $output['gre']['vehiculo']['placa']        = sanitize_text_field((string) ($v['placa'] ?? ''));
+                $output['gre']['vehiculo']['autorizacion'] = sanitize_text_field((string) ($v['autorizacion'] ?? ''));
+                $output['gre']['vehiculo']['entidad']      = sanitize_text_field((string) ($v['entidad'] ?? ''));
+            }
+            if (isset($input['gre']['conductor']) && is_array($input['gre']['conductor'])) {
+                $c = $input['gre']['conductor'];
+                $output['gre']['conductor']['tipo_documento']   = sanitize_text_field((string) ($c['tipo_documento'] ?? ''));
+                $output['gre']['conductor']['numero_documento'] = sanitize_text_field((string) ($c['numero_documento'] ?? ''));
+                $output['gre']['conductor']['nombres']           = sanitize_text_field((string) ($c['nombres'] ?? ''));
+                $output['gre']['conductor']['apellidos']         = sanitize_text_field((string) ($c['apellidos'] ?? ''));
+                $output['gre']['conductor']['licencia']          = sanitize_text_field((string) ($c['licencia'] ?? ''));
+            }
             if (isset($input['gre']['partida']) && is_array($input['gre']['partida'])) {
-                $output['gre']['partida']['ubigeo']    = sanitize_text_field((string) ($input['gre']['partida']['ubigeo'] ?? ''));
-                $output['gre']['partida']['direccion'] = sanitize_text_field((string) ($input['gre']['partida']['direccion'] ?? ''));
+                $p = $input['gre']['partida'];
+                $output['gre']['partida']['departamento'] = sanitize_text_field((string) ($p['departamento'] ?? ''));
+                $output['gre']['partida']['provincia']    = sanitize_text_field((string) ($p['provincia'] ?? ''));
+                $output['gre']['partida']['distrito']     = sanitize_text_field((string) ($p['distrito'] ?? ''));
+                $output['gre']['partida']['ubigeo']       = sanitize_text_field((string) ($p['ubigeo'] ?? ''));
+                $output['gre']['partida']['direccion']    = sanitize_text_field((string) ($p['direccion'] ?? ''));
             }
         }
 
         if (isset($input['settings']) && is_array($input['settings'])) {
             $output['settings']['debug']           = !empty($input['settings']['debug']);
             $output['settings']['custom_checkout'] = !empty($input['settings']['custom_checkout']);
-            $output['settings']['multi_branch']     = !empty($input['settings']['multi_branch']);
-            $output['settings']['multi_branch_key']  = sanitize_text_field((string) ($input['settings']['multi_branch_key'] ?? ''));
+            $output['settings']['multi_branch']     = array_key_exists('multi_branch', $input['settings'])
+                ? !empty($input['settings']['multi_branch'])
+                : (bool) Options::getValue('settings.multi_branch', false);
+            $output['settings']['multi_branch_key']  = sanitize_text_field((string) (
+                $input['settings']['multi_branch_key'] ?? Options::getValue('settings.multi_branch_key', '')
+            ));
 
             if (isset($input['settings']['tax_rate_mapping']) && is_array($input['settings']['tax_rate_mapping'])) {
                 $allowedMap = ['gravado10', 'gravado105', 'gravado18', 'exonerado', 'inafecto'];
@@ -130,7 +154,7 @@ class SettingsPage {
                 $mapping = $input['settings']['checkout_mapping'];
                 foreach ([
                     'document_type_key', 'customer_id_type_key', 'customer_id_key',
-                    'document_type_key_value_01', 'document_type_key_value_03',
+                    'document_type_value_01', 'document_type_value_03',
                         'customer_id_type_value_-', 'customer_id_type_value_1', 'customer_id_type_value_6', 'customer_id_type_value_H', 'customer_id_type_value_7',
                         'customer_id_type_value_4', 'customer_id_type_value_E', 'customer_id_type_value_A', 'customer_id_type_value_G',
                         'customer_id_type_value_C', 'customer_id_type_value_D', 'customer_id_type_value_B', 'customer_id_type_value_0',
@@ -193,6 +217,8 @@ class SettingsPage {
                     $g = $branch['gre'];
                     $sanitizedGre = [];
                     $sanitizedGre['vehiculo_categoria'] = !empty($g['vehiculo_categoria']);
+                    $sanitizedGre['motivo_traslado'] = in_array(($g['motivo_traslado'] ?? ''), ['01', '03', '14'], true) ? $g['motivo_traslado'] : '01';
+                    $sanitizedGre['modalidad_transporte'] = in_array(($g['modalidad_transporte'] ?? ''), ['01', '02'], true) ? $g['modalidad_transporte'] : '01';
                     if (isset($g['transportista']) && is_array($g['transportista'])) {
                         $sanitizedGre['transportista']['nombre'] = sanitize_text_field((string) ($g['transportista']['nombre'] ?? ''));
                         $sanitizedGre['transportista']['ruc']    = sanitize_text_field((string) ($g['transportista']['ruc'] ?? ''));
@@ -210,14 +236,46 @@ class SettingsPage {
 
         Options::flushCache();
 
-        if (!empty($output['settings']['multi_branch']) && empty($output['branches'])) {
+        $multiBranchEnabled = array_key_exists('multi_branch', $output['settings'] ?? [])
+            ? !empty($output['settings']['multi_branch'])
+            : (bool) Options::getValue('settings.multi_branch', false);
+
+        if ($multiBranchEnabled) {
+            if (empty($output['branches'])) {
+                $existing = Options::get();
+                if (!empty($existing['branches']) && is_array($existing['branches'])) {
+                    // Settings-only forms (such as changing the branch meta key)
+                    // do not submit branch fields; preserve every saved branch.
+                    $output['branches'] = $existing['branches'];
+                } else {
+                    // First activation: migrate the current single-branch values.
+                    $output['branches'] = [[
+                        'branch_name' => __('Sucursal 1', 'apisunatv2'),
+                        'api'         => $existing['api'] ?? [],
+                        'issue'       => $existing['issue'] ?? [],
+                        'detraction'  => $existing['detraction'] ?? [],
+                        'gre'          => $existing['gre'] ?? [],
+                    ]];
+                }
+            }
+        } else {
+            $existingBranch = [];
             $existing = Options::get();
+            if (!empty($existing['branches'])) {
+                $existingBranch = $existing['branches'][0];
+                $sections = ['api', 'issue', 'detraction', 'gre'];
+                foreach ($sections as $sec) {
+                    if (empty($output[$sec]) && !empty($existingBranch[$sec])) {
+                        $output[$sec] = $existingBranch[$sec];
+                    }
+                }
+            }
             $output['branches'] = [[
-                'branch_name' => __('Sucursal 1', 'apisunatv2'),
-                'api'        => $existing['api'] ?? [],
-                'issue'    => $existing['issue'] ?? [],
-                'detraction' => $existing['detraction'] ?? [],
-                'gre'      => $existing['gre'] ?? [],
+                'branch_name' => __('Predeterminada', 'apisunatv2'),
+                'api'         => $output['api'] ?? $existingBranch['api'] ?? [],
+                'issue'       => $output['issue'] ?? $existingBranch['issue'] ?? [],
+                'detraction'  => $output['detraction'] ?? $existingBranch['detraction'] ?? [],
+                'gre'         => $output['gre'] ?? $existingBranch['gre'] ?? [],
             ]];
         }
 
@@ -567,33 +625,33 @@ class SettingsPage {
 
                 <?php if (!isset($_GET['view']) || $_GET['view'] !== 'settings'): ?>
                 <?php if (!empty($branchTabs)): ?>
-                <ul class="subsubsub" style="margin:0 0 8px;float: none;">
+                <nav class="nav-tab-wrapper woo-nav-tab-wrapper apisunat-tabs apisunat-branch-tabs" aria-label="<?= esc_attr__('Sucursales', 'apisunatv2') ?>">
                     <?php foreach ($branchTabs as $i => $branchLabel): ?>
-                    <li>
-                        <a href="<?= esc_url(add_query_arg(['branch' => $i])) ?>" class="<?= $currentBranch === $i ? 'current' : '' ?>"><?= esc_html($branchLabel) ?></a>
+                    <span class="apisunat-branch-tab">
+                        <a href="<?= esc_url(add_query_arg(['branch' => $i])) ?>" class="nav-tab <?= $currentBranch === $i ? 'nav-tab-active' : '' ?>">
+                            <?= esc_html($branchLabel) ?>
+                        </a>
                         <?php if ($i === $currentBranch && count($branchTabs) > 1): ?>
-                        <a href="<?= esc_url(add_query_arg(['delete_branch' => $i])) ?>" class="apisunat-delete-branch" style="color:#b32d2e;text-decoration:none;margin-left:2px;" title="<?= esc_attr__('Eliminar sucursal', 'apisunatv2') ?>">✕</a>
+                        <a href="<?= esc_url(add_query_arg(['delete_branch' => $i])) ?>" class="apisunat-delete-branch" title="<?= esc_attr__('Eliminar sucursal', 'apisunatv2') ?>" aria-label="<?= esc_attr__('Eliminar sucursal', 'apisunatv2') ?>">✕</a>
                         <?php endif; ?>
-                        <?= $i < count($branchTabs) - 1 ? ' |' : '' ?>
-                    </li>
+                    </span>
                     <?php endforeach; ?>
-                    <li>
-                        <a href="<?= esc_url(add_query_arg(['add_branch' => '1'])) ?>" class="button button-small" style="margin-left:8px;vertical-align:baseline;height:auto;line-height:2;min-height:0;"><?= esc_html__('+', 'apisunatv2') ?></a>
-                    </li>
-                </ul>
+                    <a href="<?= esc_url(add_query_arg(['add_branch' => '1'])) ?>" class="nav-tab apisunat-add-branch" aria-label="<?= esc_attr__('Agregar sucursal', 'apisunatv2') ?>" title="<?= esc_attr__('Agregar sucursal', 'apisunatv2') ?>">+</a>
+                </nav>
                 <div style="margin-bottom:8px;">
                     <label style="display:block;margin-bottom:2px;font-weight:600;"><?= esc_html__('Nombre de sucursal', 'apisunatv2') ?></label>
                     <input type="text" name="apisunatv2_settings[branches][<?= (int) $currentBranch ?>][branch_name]" value="<?= esc_attr($branchTabs[$currentBranch]) ?>" class="regular-text" style="max-width:300px;">
                 </div>
                 <?php endif; ?>
-                <nav class="nav-tab-wrapper apisunat-tabs" aria-label="<?= esc_attr__('Secciones', 'apisunatv2') ?>">
+                <ul class="subsubsub apisunat-section-subtabs" aria-label="<?= esc_attr__('Secciones', 'apisunatv2') ?>">
                     <?php foreach ($tabs as $id => $tab): ?>
-                        <a href="<?= esc_url(add_query_arg(array_merge(['page' => 'apisunat', 'tab' => $id], isset($_GET['branch']) ? ['branch' => (int) $_GET['branch']] : []), admin_url('admin.php'))) ?>"
-                           class="nav-tab <?= $currentTab === $id ? 'nav-tab-active' : '' ?>">
+                    <li>
+                        <a href="<?= esc_url(add_query_arg(array_merge(['page' => 'apisunat', 'tab' => $id], isset($_GET['branch']) ? ['branch' => (int) $_GET['branch']] : []), admin_url('admin.php'))) ?>" class="<?= $currentTab === $id ? 'current' : '' ?>">
                             <?= esc_html($tab['label']) ?>
-                        </a>
+                        </a><?= $id !== array_key_last($tabs) ? ' |' : '' ?>
+                    </li>
                     <?php endforeach; ?>
-                </nav>
+                </ul>
                 <?php endif; ?>
 
             <div class="apisunat-content">
@@ -623,17 +681,37 @@ class SettingsPage {
                         $isSettingsView = isset($_GET['view']) && $_GET['view'] === 'settings';
 
                         if ($isSettingsView) {
-                            // Render only the advanced/settings section
+                            $settingsTab = isset($_GET['subtab']) ? sanitize_key(wp_unslash($_GET['subtab'])) : 'general';
+                            $settingsTabs = [
+                                'general'   => __('General', 'apisunatv2'),
+                                'checkout'  => __('Checkout personalizado', 'apisunatv2'),
+                                'impuestos' => __('Impuestos', 'apisunatv2'),
+                            ];
+                            $fieldFilter = match ($settingsTab) {
+                                'checkout'  => ['settings.custom_checkout', 'settings.checkout_mapping'],
+                                'impuestos' => ['tax_manager'],
+                                default     => ['settings.multi_branch', 'settings.multi_branch_key', 'settings.debug'],
+                            };
+                            echo '<nav class="nav-tab-wrapper" style="margin-bottom:12px;">';
+                            foreach ($settingsTabs as $tabKey => $tabLabel) {
+                                $url = add_query_arg(['subtab' => $tabKey]);
+                                $active = $settingsTab === $tabKey ? ' nav-tab-active' : '';
+                                echo '<a href="' . esc_url($url) . '" class="nav-tab' . $active . '">' . esc_html($tabLabel) . '</a>';
+                            }
+                            echo '</nav>';
                             foreach ($schema as $section) {
                                 if ($section['id'] !== 'apisunat_avanzado') {
                                     continue;
                                 }
-                                if (!empty($section['desc']) && is_callable($section['desc'])) {
+                                if ($settingsTab === 'impuestos' && !empty($section['desc']) && is_callable($section['desc'])) {
                                     echo '<tr><td colspan="2">';
                                     call_user_func($section['desc']);
                                     echo '</td></tr>';
                                 }
                                 foreach ($section['fields'] as $field) {
+                                    if (!in_array($field['key'], $fieldFilter, true)) {
+                                        continue;
+                                    }
                                     $id = self::fieldId($field['key']);
                                     echo '<tr>';
                                     echo '<th scope="row"><label for="' . esc_attr($id) . '">' . esc_html($field['label']) . '</label></th>';
@@ -709,6 +787,8 @@ class SettingsPage {
             'tax_manager'     => self::renderTaxManager(),
             'tipo_detraction_select' => self::renderTipoDetractionSelect($name, $id, (string) $value),
             'checkout_mapping'       => self::renderCheckoutMapping(),
+            'detraction_defaults'    => self::renderDetractionDefaults(implode('.', array_slice($keys, 0, -1))),
+            'gre_defaults'           => self::renderGreDefaults(implode('.', array_slice($keys, 0, -1))),
             default           => self::renderTextInput($name, $id, (string) $value, $field),
         };
     }
@@ -953,22 +1033,317 @@ class SettingsPage {
             );
         }
         echo '</select>';
-        $pctId = self::fieldId('detraction.percentage');
+        $pctId = preg_replace('/-detraction_type$/', '-percentage', $id);
         ?>
         <script>
         document.addEventListener('DOMContentLoaded', function() {
             var tipo = document.getElementById('<?= esc_js($id) ?>');
             var pct  = document.getElementById('<?= esc_js($pctId) ?>');
             if (tipo && pct) {
-                var setPct = function() {
+                tipo.addEventListener('change', function() {
                     var opt = tipo.options[tipo.selectedIndex];
                     if (opt && opt.dataset.percent) {
                         pct.value = opt.dataset.percent;
+                    } else {
+                        pct.value = '';
                     }
-                };
-                tipo.addEventListener('change', setPct);
-                setPct();
+                });
             }
+        });
+        </script>
+        <?php
+    }
+
+    private static function renderDetractionDefaults(string $prefix): void {
+        $fullKey = fn (string $key) => $prefix ? $prefix . '.' . $key : $key;
+        $keys = fn (string $key) => explode('.', $fullKey($key));
+        $name = fn (string $key) => self::buildName($keys($key));
+        $id   = fn (string $key) => self::fieldId($fullKey($key));
+        $val  = fn (string $key, $default = '') => Options::getValue($fullKey($key), $default);
+        $baseName = Options::OPTION_KEY;
+        foreach ($keys('detraction_type') as $k) {
+            $baseName .= '[' . $k . ']';
+        }
+        $baseName = dirname($baseName);
+        $tipos    = Catalogs::tiposDeDetraction();
+        $medios   = Catalogs::mediosDePago();
+        ?>
+        <p class="form-field form-field-wide" style="margin:0 0 8px;">
+            <label for="<?= esc_attr($id('detraction_type')) ?>"><?= esc_html__('Tipo de detracción', 'apisunatv2') ?></label>
+            <select id="<?= esc_attr($id('detraction_type')) ?>" name="<?= esc_attr($name('detraction_type')) ?>">
+                <?php foreach ($tipos as $k => $v): ?>
+                    <option value="<?= esc_attr($k) ?>" <?= selected((string) $val('detraction_type'), (string) $k, false) ?> data-percent="<?= esc_attr($v['percent'] !== null ? (string) $v['percent'] : '') ?>"><?= esc_html($v['label']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </p>
+        <p class="form-field form-field-wide" style="margin:0 0 8px;">
+            <label for="<?= esc_attr($id('percentage')) ?>"><?= esc_html__('Porcentaje %', 'apisunatv2') ?></label>
+            <input type="number" id="<?= esc_attr($id('percentage')) ?>" name="<?= esc_attr($name('percentage')) ?>" value="<?= esc_attr($val('percentage', 12)) ?>" step="1" min="0" max="100">
+        </p>
+        <p class="form-field form-field-wide" style="margin:0 0 8px;">
+            <label for="<?= esc_attr($id('payment_method')) ?>"><?= esc_html__('Medio de pago', 'apisunatv2') ?></label>
+            <select id="<?= esc_attr($id('payment_method')) ?>" name="<?= esc_attr($name('payment_method')) ?>">
+                <?php foreach ($medios as $k => $v): ?>
+                    <option value="<?= esc_attr($k) ?>" <?= selected((string) $val('payment_method'), (string) $k, false) ?>><?= esc_html($v) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </p>
+        <p class="form-field form-field-wide" style="margin:0 0 8px;">
+            <label for="<?= esc_attr($id('bank_account')) ?>"><?= esc_html__('Cuenta Bancaria', 'apisunatv2') ?></label>
+            <input type="text" id="<?= esc_attr($id('bank_account')) ?>" name="<?= esc_attr($name('bank_account')) ?>" value="<?= esc_attr($val('bank_account')) ?>" placeholder="00-000-000000">
+        </p>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var tipo = document.getElementById('<?= esc_js($id('detraction_type')) ?>');
+            var pct  = document.getElementById('<?= esc_js($id('percentage')) ?>');
+            if (tipo && pct) {
+                tipo.addEventListener('change', function() {
+                    var opt = tipo.options[tipo.selectedIndex];
+                    if (opt && opt.dataset.percent) {
+                        pct.value = opt.dataset.percent;
+                    } else {
+                        pct.value = '';
+                    }
+                });
+            }
+        });
+        </script>
+        <?php
+    }
+
+    private static function renderGreDefaults(string $prefix): void {
+        $fullKey = fn (string $key) => $prefix ? $prefix . '.' . $key : $key;
+        $keys = fn (string $key) => explode('.', $fullKey($key));
+        $name = fn (string $key) => self::buildName($keys($key));
+        $id   = fn (string $key) => self::fieldId($fullKey($key));
+        $val  = fn (string $key, $default = '') => Options::getValue($fullKey($key), $default);
+        $modalidad = $val('modalidad_transporte', '');
+        ?>
+        <p class="form-field form-field-wide" style="margin:0 0 8px;">
+            <label for="<?= esc_attr($id('motivo_traslado')) ?>"><?= esc_html__('Motivo de Traslado', 'apisunatv2') ?></label>
+            <select id="<?= esc_attr($id('motivo_traslado')) ?>" name="<?= esc_attr($name('motivo_traslado')) ?>">
+                <option value="01" <?= selected($val('motivo_traslado', '01'), '01', false) ?>><?= esc_html__('Venta', 'apisunatv2') ?></option>
+                <option value="03" <?= selected($val('motivo_traslado', '01'), '03', false) ?>><?= esc_html__('Venta con entrega a terceros', 'apisunatv2') ?></option>
+                <option value="14" <?= selected($val('motivo_traslado', '01'), '14', false) ?>><?= esc_html__('Venta sujeta a confirmación', 'apisunatv2') ?></option>
+            </select>
+        </p>
+        <p class="form-field form-field-wide" style="margin:0 0 8px;">
+            <label for="<?= esc_attr($id('modalidad_transporte')) ?>"><?= esc_html__('Modalidad de Transporte', 'apisunatv2') ?></label>
+            <select id="<?= esc_attr($id('modalidad_transporte')) ?>" name="<?= esc_attr($name('modalidad_transporte')) ?>">
+                <option value="01" <?= selected($val('modalidad_transporte', '01'), '01', false) ?>><?= esc_html__('Transporte Público', 'apisunatv2') ?></option>
+                <option value="02" <?= selected($val('modalidad_transporte', '01'), '02', false) ?>><?= esc_html__('Transporte Privado', 'apisunatv2') ?></option>
+            </select>
+        </p>
+        <div class="form-field form-field-wide" style="margin:0 0 8px;">
+            <label class="checkbox style-e" for="<?= esc_attr($id('vehiculo_categoria')) ?>">
+                <input type="hidden" name="<?= esc_attr($name('vehiculo_categoria')) ?>" value="0" />
+                <input type="checkbox" id="<?= esc_attr($id('vehiculo_categoria')) ?>" name="<?= esc_attr($name('vehiculo_categoria')) ?>" value="1" />
+                <div class="checkbox__checkmark"></div>
+            </label>
+            <span style="margin-left:50px;display:inline-block;vertical-align:middle"><?= esc_html__('Vehículos Categoría M1 o L', 'apisunatv2') ?></span>
+        </div>
+        <div id="<?= esc_attr($id('transportista-section')) ?>" style="<?= $modalidad === '01' ? '' : 'display:none;' ?>">
+            <h4><?= esc_html__('Transportista', 'apisunatv2') ?></h4>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('transportista.nombre')) ?>"><?= esc_html__('Nombre', 'apisunatv2') ?></label>
+                <input type="text" id="<?= esc_attr($id('transportista.nombre')) ?>" name="<?= esc_attr($name('transportista.nombre')) ?>" value="<?= esc_attr($val('transportista.nombre')) ?>">
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('transportista.ruc')) ?>"><?= esc_html__('RUC', 'apisunatv2') ?></label>
+                <input type="text" id="<?= esc_attr($id('transportista.ruc')) ?>" name="<?= esc_attr($name('transportista.ruc')) ?>" value="<?= esc_attr($val('transportista.ruc')) ?>">
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('transportista.mtc')) ?>"><?= esc_html__('Registro MTC', 'apisunatv2') ?></label>
+                <input type="text" id="<?= esc_attr($id('transportista.mtc')) ?>" name="<?= esc_attr($name('transportista.mtc')) ?>" value="<?= esc_attr($val('transportista.mtc')) ?>">
+            </p>
+        </div>
+        <div id="<?= esc_attr($id('vehiculos-section')) ?>" style="<?= $modalidad === '02' && !$val('vehiculo_categoria', false) ? '' : 'display:none;' ?>">
+            <h4><?= esc_html__('Vehículo', 'apisunatv2') ?></h4>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('vehiculo.placa')) ?>"><?= esc_html__('Placa', 'apisunatv2') ?></label>
+                <input type="text" id="<?= esc_attr($id('vehiculo.placa')) ?>" name="<?= esc_attr($name('vehiculo.placa')) ?>" value="<?= esc_attr($val('vehiculo.placa')) ?>">
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('vehiculo.autorizacion')) ?>"><?= esc_html__('N° Autorización Especial', 'apisunatv2') ?></label>
+                <input type="text" id="<?= esc_attr($id('vehiculo.autorizacion')) ?>" name="<?= esc_attr($name('vehiculo.autorizacion')) ?>" value="<?= esc_attr($val('vehiculo.autorizacion')) ?>">
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('vehiculo.entidad')) ?>"><?= esc_html__('Entidad Emisora', 'apisunatv2') ?></label>
+                <select id="<?= esc_attr($id('vehiculo.entidad')) ?>" name="<?= esc_attr($name('vehiculo.entidad')) ?>">
+                    <option value=""><?= esc_html__('Seleccionar...', 'apisunatv2') ?></option>
+                    <option value="01" <?= selected($val('vehiculo.entidad'), '01', false) ?>><?= esc_html__('SUCAMEC', 'apisunatv2') ?></option>
+                    <option value="02" <?= selected($val('vehiculo.entidad'), '02', false) ?>><?= esc_html__('DIGEMID', 'apisunatv2') ?></option>
+                    <option value="03" <?= selected($val('vehiculo.entidad'), '03', false) ?>><?= esc_html__('DIGESA', 'apisunatv2') ?></option>
+                    <option value="04" <?= selected($val('vehiculo.entidad'), '04', false) ?>><?= esc_html__('SENASA', 'apisunatv2') ?></option>
+                    <option value="05" <?= selected($val('vehiculo.entidad'), '05', false) ?>><?= esc_html__('SERFOR', 'apisunatv2') ?></option>
+                    <option value="06" <?= selected($val('vehiculo.entidad'), '06', false) ?>><?= esc_html__('MTC', 'apisunatv2') ?></option>
+                    <option value="07" <?= selected($val('vehiculo.entidad'), '07', false) ?>><?= esc_html__('PRODUCE', 'apisunatv2') ?></option>
+                    <option value="08" <?= selected($val('vehiculo.entidad'), '08', false) ?>><?= esc_html__('MIN. AMBIENTE', 'apisunatv2') ?></option>
+                    <option value="09" <?= selected($val('vehiculo.entidad'), '09', false) ?>><?= esc_html__('SANIPES', 'apisunatv2') ?></option>
+                    <option value="10" <?= selected($val('vehiculo.entidad'), '10', false) ?>><?= esc_html__('MML', 'apisunatv2') ?></option>
+                    <option value="11" <?= selected($val('vehiculo.entidad'), '11', false) ?>><?= esc_html__('MINSA', 'apisunatv2') ?></option>
+                    <option value="12" <?= selected($val('vehiculo.entidad'), '12', false) ?>><?= esc_html__('GR', 'apisunatv2') ?></option>
+                </select>
+            </p>
+        </div>
+        <div id="<?= esc_attr($id('conductores-section')) ?>" style="<?= $modalidad === '02' && !$val('vehiculo_categoria', false) ? '' : 'display:none;' ?>">
+            <h4><?= esc_html__('Conductor', 'apisunatv2') ?></h4>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('conductor.tipo_documento')) ?>"><?= esc_html__('Tipo Documento', 'apisunatv2') ?></label>
+                <select id="<?= esc_attr($id('conductor.tipo_documento')) ?>" name="<?= esc_attr($name('conductor.tipo_documento')) ?>">
+                    <option value=""><?= esc_html__('Seleccionar...', 'apisunatv2') ?></option>
+                    <option value="-" <?= selected($val('conductor.tipo_documento'), '-', false) ?>><?= esc_html__('Sin documento', 'apisunatv2') ?></option>
+                    <option value="1" <?= selected($val('conductor.tipo_documento', '1'), '1', false) ?>><?= esc_html__('DNI', 'apisunatv2') ?></option>
+                    <option value="6" <?= selected($val('conductor.tipo_documento', '1'), '6', false) ?>><?= esc_html__('RUC', 'apisunatv2') ?></option>
+                    <option value="7" <?= selected($val('conductor.tipo_documento', '1'), '7', false) ?>><?= esc_html__('Pasaporte', 'apisunatv2') ?></option>
+                    <option value="4" <?= selected($val('conductor.tipo_documento', '1'), '4', false) ?>><?= esc_html__('Carnet de extranjería', 'apisunatv2') ?></option>
+                </select>
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('conductor.numero_documento')) ?>"><?= esc_html__('N° Documento', 'apisunatv2') ?></label>
+                <input type="text" id="<?= esc_attr($id('conductor.numero_documento')) ?>" name="<?= esc_attr($name('conductor.numero_documento')) ?>" value="<?= esc_attr($val('conductor.numero_documento')) ?>">
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('conductor.nombres')) ?>"><?= esc_html__('Nombres', 'apisunatv2') ?></label>
+                <input type="text" id="<?= esc_attr($id('conductor.nombres')) ?>" name="<?= esc_attr($name('conductor.nombres')) ?>" value="<?= esc_attr($val('conductor.nombres')) ?>">
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('conductor.apellidos')) ?>"><?= esc_html__('Apellidos', 'apisunatv2') ?></label>
+                <input type="text" id="<?= esc_attr($id('conductor.apellidos')) ?>" name="<?= esc_attr($name('conductor.apellidos')) ?>" value="<?= esc_attr($val('conductor.apellidos')) ?>">
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('conductor.licencia')) ?>"><?= esc_html__('Licencia de Conducir', 'apisunatv2') ?></label>
+                <input type="text" id="<?= esc_attr($id('conductor.licencia')) ?>" name="<?= esc_attr($name('conductor.licencia')) ?>" value="<?= esc_attr($val('conductor.licencia')) ?>">
+            </p>
+        </div>
+        <div id="<?= esc_attr($id('partida-section')) ?>">
+            <h4><?= esc_html__('Punto de Partida', 'apisunatv2') ?></h4>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('partida.departamento')) ?>"><?= esc_html__('Departamento', 'apisunatv2') ?></label>
+                <select id="<?= esc_attr($id('partida.departamento')) ?>" class="gre-ubigeo-dep" name="<?= esc_attr($name('partida.departamento')) ?>" data-saved="<?= esc_attr($val('partida.departamento')) ?>">
+                    <option value=""><?= esc_html__('Seleccionar...', 'apisunatv2') ?></option>
+                </select>
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('partida.provincia')) ?>"><?= esc_html__('Provincia', 'apisunatv2') ?></label>
+                <select id="<?= esc_attr($id('partida.provincia')) ?>" class="gre-ubigeo-prov" name="<?= esc_attr($name('partida.provincia')) ?>" data-saved="<?= esc_attr($val('partida.provincia')) ?>">
+                    <option value=""><?= esc_html__('Seleccionar...', 'apisunatv2') ?></option>
+                </select>
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('partida.distrito')) ?>"><?= esc_html__('Distrito', 'apisunatv2') ?></label>
+                <select id="<?= esc_attr($id('partida.distrito')) ?>" class="gre-ubigeo-dist" name="<?= esc_attr($name('partida.distrito')) ?>" data-saved="<?= esc_attr($val('partida.distrito')) ?>">
+                    <option value=""><?= esc_html__('Seleccionar...', 'apisunatv2') ?></option>
+                </select>
+            </p>
+            <p class="form-field form-field-wide" style="margin:0 0 8px;">
+                <label for="<?= esc_attr($id('partida.direccion')) ?>"><?= esc_html__('Dirección', 'apisunatv2') ?></label>
+                <input type="text" id="<?= esc_attr($id('partida.direccion')) ?>" name="<?= esc_attr($name('partida.direccion')) ?>" value="<?= esc_attr($val('partida.direccion')) ?>">
+            </p>
+            <input type="hidden" id="<?= esc_attr($id('partida.ubigeo')) ?>" name="<?= esc_attr($name('partida.ubigeo')) ?>" value="<?= esc_attr($val('partida.ubigeo')) ?>">
+        </div>
+        <?php
+        $ubigeoData = wp_json_encode(\Atm\Apisunatwp\Data\Ubigeo::getData());
+        ?>
+        <script>
+        window.apisunatv2_settings_ubigeo = <?= $ubigeoData ?>;
+        document.addEventListener('DOMContentLoaded', function() {
+            var ubigeo = window.apisunatv2_settings_ubigeo || { departments: [], provinces: {}, districts: {} };
+
+            function initDepSelects() {
+                document.querySelectorAll('.gre-ubigeo-dep').forEach(function(sel) {
+                    var currentVal = sel.getAttribute('data-saved') || '';
+                    while (sel.options.length > 1) sel.remove(1);
+                    (ubigeo.departments || []).forEach(function(dep) {
+                        var opt = document.createElement('option');
+                        opt.value = dep.code;
+                        opt.textContent = dep.name;
+                        sel.appendChild(opt);
+                    });
+                    if (currentVal) {
+                        sel.value = currentVal;
+                        sel.dispatchEvent(new Event('change'));
+                    }
+                });
+            }
+
+            function initProvDist(depSelect) {
+                var depCode = depSelect.value;
+                var provSel = document.getElementById(depSelect.id.replace('departamento', 'provincia'));
+                var distSel = document.getElementById(depSelect.id.replace('departamento', 'distrito'));
+                if (!provSel || !distSel) return;
+                while (provSel.options.length > 1) provSel.remove(1);
+                while (distSel.options.length > 1) distSel.remove(1);
+                if (depCode && ubigeo.provinces[depCode]) {
+                    (ubigeo.provinces[depCode] || []).forEach(function(prov) {
+                        var opt = document.createElement('option');
+                        opt.value = prov.code;
+                        opt.textContent = prov.name;
+                        provSel.appendChild(opt);
+                    });
+                    var provSaved = provSel.getAttribute('data-saved') || '';
+                    if (provSaved) {
+                        provSel.value = provSaved;
+                        provSel.dispatchEvent(new Event('change'));
+                    }
+                }
+            }
+
+            document.querySelectorAll('.gre-ubigeo-dep').forEach(function(sel) {
+                sel.addEventListener('change', function() { initProvDist(this); });
+            });
+
+            document.querySelectorAll('.gre-ubigeo-prov').forEach(function(sel) {
+                sel.addEventListener('change', function() {
+                    var provCode = this.value;
+                    var distSel = document.getElementById(this.id.replace('provincia', 'distrito'));
+                    if (!distSel) return;
+                    while (distSel.options.length > 1) distSel.remove(1);
+                    if (provCode && ubigeo.districts[provCode]) {
+                        (ubigeo.districts[provCode] || []).forEach(function(dist) {
+                            var opt = document.createElement('option');
+                            opt.value = dist.code.slice(-2);
+                            opt.textContent = dist.name;
+                            distSel.appendChild(opt);
+                        });
+                        var distSaved = distSel.getAttribute('data-saved') || '';
+                        if (distSaved) distSel.value = distSaved;
+                    }
+                });
+            });
+
+            function updateUbigeo() {
+                var dep = document.querySelector('.gre-ubigeo-dep');
+                var prov = document.querySelector('.gre-ubigeo-prov');
+                var dist = document.querySelector('.gre-ubigeo-dist');
+                var ubigeoInput = dep && document.getElementById(dep.id.replace('departamento', 'ubigeo'));
+                if (ubigeoInput) {
+                    ubigeoInput.value = (dep ? dep.value : '') + (prov ? prov.value : '') + (dist ? dist.value : '');
+                }
+            }
+            document.querySelectorAll('.gre-ubigeo-dep, .gre-ubigeo-prov, .gre-ubigeo-dist').forEach(function(sel) {
+                sel.addEventListener('change', updateUbigeo);
+            });
+
+            initDepSelects();
+        });
+        </script>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var modalidad  = document.getElementById('<?= esc_js($id('modalidad_transporte')) ?>');
+            var categoria  = document.getElementById('<?= esc_js($id('vehiculo_categoria')) ?>');
+            var transSection = document.getElementById('<?= esc_js($id('transportista-section')) ?>');
+            var vehSection = document.getElementById('<?= esc_js($id('vehiculos-section')) ?>');
+            var condSection = document.getElementById('<?= esc_js($id('conductores-section')) ?>');
+            function toggleAll() {
+                var m = modalidad ? modalidad.value : '';
+                var isM1orL = categoria ? categoria.checked : false;
+                if (transSection) transSection.style.display = m === '01' ? '' : 'none';
+                if (vehSection) vehSection.style.display = m === '02' && !isM1orL ? '' : 'none';
+                if (condSection) condSection.style.display = m === '02' && !isM1orL ? '' : 'none';
+            }
+            if (modalidad) modalidad.addEventListener('change', toggleAll);
+            if (categoria) categoria.addEventListener('change', toggleAll);
         });
         </script>
         <?php
@@ -987,11 +1362,11 @@ class SettingsPage {
                 </tr>
                 <tr>
                     <th><?= esc_html__('Valor FACTURA', 'apisunatv2') ?></th>
-                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_key_value_01]" value="<?= esc_attr($mapping['value_01'] ?? '01') ?>" placeholder="01" class="regular-text"></td>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_value_01]" value="<?= esc_attr($mapping['value_01'] ?? '01') ?>" placeholder="01" class="regular-text"></td>
                 </tr>
                 <tr>
                     <th><?= esc_html__('Valor BOLETA', 'apisunatv2') ?></th>
-                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_key_value_03]" value="<?= esc_attr($mapping['value_03'] ?? '03') ?>" placeholder="03" class="regular-text"></td>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_value_03]" value="<?= esc_attr($mapping['value_03'] ?? '03') ?>" placeholder="03" class="regular-text"></td>
                 </tr>
                 <tr>
                     <th><?= esc_html__('Key Tipo Doc.', 'apisunatv2') ?></th>
@@ -1123,24 +1498,16 @@ class SettingsPage {
                 'id'    => 'apisunat_detraction',
                 'title' => __('Detracción', 'apisunatv2'),
                 'fields' => [
-                    ['key' => 'detraction.detraction_type',      'label' => __('Tipo de detracción', 'apisunatv2'),          'type' => 'tipo_detraction_select', 'options' => Catalogs::tipoDeDetractionOptions()],
-                    ['key' => 'detraction.percentage',    'label' => __('Porcentaje %', 'apisunatv2'),             'type' => 'number', 'default' => 12, 'min' => 0, 'max' => 100],
-                    ['key' => 'detraction.payment_method',      'label' => __('Medio de pago', 'apisunatv2'),          'type' => 'select', 'options' => Catalogs::mediosDePago()],
-                    ['key' => 'detraction.bank_account',   'label' => __('Cuenta Bancaria', 'apisunatv2'),        'type' => 'text', 'placeholder' => '00-000-000000'],
-                    ['key' => 'detraction.exchange_rate',   'label' => __('Tipo de cambio', 'apisunatv2'), 'type' => 'text', 'placeholder' => 'USD=3.5,EUR=4.0,COP=0.7'],
-                    ['key' => 'detraction.enabled',           'label' => __('Aplicar automáticamente para ventas superiores a 700 PEN', 'apisunatv2'), 'type' => 'checkbox'],
+                    ['key' => 'detraction.defaults', 'label' => __('Configuración predeterminada', 'apisunatv2'), 'type' => 'detraction_defaults'],
+                    ['key' => 'detraction.exchange_rate', 'label' => __('Tipo de cambio', 'apisunatv2'), 'type' => 'text', 'placeholder' => 'USD=3.5,EUR=4.0,COP=0.7'],
+                    ['key' => 'detraction.enabled', 'label' => __('Aplicar automáticamente para ventas superiores a 700 PEN', 'apisunatv2'), 'type' => 'checkbox'],
                 ],
             ],
             [
                 'id'    => 'apisunat_gre',
                 'title' => __('Guía de Remisión', 'apisunatv2'),
                 'fields' => [
-                    ['key' => 'gre.vehiculo_categoria', 'label' => __('Vehículos Categoría M1 o L', 'apisunatv2'), 'type' => 'checkbox'],
-                    ['key' => 'gre.transportista.nombre', 'label' => __('Nombre transportista', 'apisunatv2'), 'type' => 'text'],
-                    ['key' => 'gre.transportista.ruc', 'label' => __('RUC transportista', 'apisunatv2'), 'type' => 'text'],
-                    ['key' => 'gre.transportista.mtc', 'label' => __('Registro MTC', 'apisunatv2'), 'type' => 'text'],
-                    ['key' => 'gre.partida.ubigeo', 'label' => __('Ubigeo partida', 'apisunatv2'), 'type' => 'text', 'placeholder' => '150101'],
-                    ['key' => 'gre.partida.direccion', 'label' => __('Dirección partida', 'apisunatv2'), 'type' => 'text'],
+                    ['key' => 'gre.defaults', 'label' => __('Configuración predeterminada', 'apisunatv2'), 'type' => 'gre_defaults'],
                 ],
             ],
             [

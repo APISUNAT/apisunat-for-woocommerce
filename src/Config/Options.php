@@ -206,8 +206,8 @@ class Options {
         $cpeType = '';
         if (!empty($mapping['document_type_key'])) {
             $raw = (string) $order->get_meta($mapping['document_type_key']);
-            $cpeFactura = $mapping['document_type_key_value_01'] ?? '01';
-            $cpeBoleta  = $mapping['document_type_key_value_03'] ?? '03';
+            $cpeFactura = $mapping['document_type_value_01'] ?? '01';
+            $cpeBoleta  = $mapping['document_type_value_03'] ?? '03';
             if ($raw === $cpeFactura) $cpeType = '01';
             elseif ($raw === $cpeBoleta) $cpeType = '03';
         }

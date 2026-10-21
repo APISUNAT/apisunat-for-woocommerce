@@ -397,6 +397,8 @@
         setTimeout(restoreUbigeo, 50);
     }
 
+    updateTransportSections();
+
     if (!$('#gre-items-list .gre-item-row').length) {
         loadOrderData();
     }
