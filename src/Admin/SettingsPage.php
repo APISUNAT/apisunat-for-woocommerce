@@ -133,8 +133,12 @@ class SettingsPage {
         if (isset($input['settings']) && is_array($input['settings'])) {
             $output['settings']['debug']           = !empty($input['settings']['debug']);
             $output['settings']['custom_checkout'] = !empty($input['settings']['custom_checkout']);
-            $output['settings']['multi_branch']     = !empty($input['settings']['multi_branch']);
-            $output['settings']['multi_branch_key']  = sanitize_text_field((string) ($input['settings']['multi_branch_key'] ?? ''));
+            $output['settings']['multi_branch']     = array_key_exists('multi_branch', $input['settings'])
+                ? !empty($input['settings']['multi_branch'])
+                : (bool) Options::getValue('settings.multi_branch', false);
+            $output['settings']['multi_branch_key']  = sanitize_text_field((string) (
+                $input['settings']['multi_branch_key'] ?? Options::getValue('settings.multi_branch_key', '')
+            ));
 
             if (isset($input['settings']['tax_rate_mapping']) && is_array($input['settings']['tax_rate_mapping'])) {
                 $allowedMap = ['gravado10', 'gravado105', 'gravado18', 'exonerado', 'inafecto'];
@@ -150,7 +154,7 @@ class SettingsPage {
                 $mapping = $input['settings']['checkout_mapping'];
                 foreach ([
                     'document_type_key', 'customer_id_type_key', 'customer_id_key',
-                    'document_type_key_value_01', 'document_type_key_value_03',
+                    'document_type_value_01', 'document_type_value_03',
                         'customer_id_type_value_-', 'customer_id_type_value_1', 'customer_id_type_value_6', 'customer_id_type_value_H', 'customer_id_type_value_7',
                         'customer_id_type_value_4', 'customer_id_type_value_E', 'customer_id_type_value_A', 'customer_id_type_value_G',
                         'customer_id_type_value_C', 'customer_id_type_value_D', 'customer_id_type_value_B', 'customer_id_type_value_0',
@@ -232,16 +236,27 @@ class SettingsPage {
 
         Options::flushCache();
 
-        if (!empty($output['settings']['multi_branch'])) {
+        $multiBranchEnabled = array_key_exists('multi_branch', $output['settings'] ?? [])
+            ? !empty($output['settings']['multi_branch'])
+            : (bool) Options::getValue('settings.multi_branch', false);
+
+        if ($multiBranchEnabled) {
             if (empty($output['branches'])) {
                 $existing = Options::get();
-                $output['branches'] = [[
-                    'branch_name' => __('Sucursal 1', 'apisunatv2'),
-                    'api'        => $existing['api'] ?? [],
-                    'issue'    => $existing['issue'] ?? [],
-                    'detraction' => $existing['detraction'] ?? [],
-                    'gre'      => $existing['gre'] ?? [],
-                ]];
+                if (!empty($existing['branches']) && is_array($existing['branches'])) {
+                    // Settings-only forms (such as changing the branch meta key)
+                    // do not submit branch fields; preserve every saved branch.
+                    $output['branches'] = $existing['branches'];
+                } else {
+                    // First activation: migrate the current single-branch values.
+                    $output['branches'] = [[
+                        'branch_name' => __('Sucursal 1', 'apisunatv2'),
+                        'api'         => $existing['api'] ?? [],
+                        'issue'       => $existing['issue'] ?? [],
+                        'detraction'  => $existing['detraction'] ?? [],
+                        'gre'          => $existing['gre'] ?? [],
+                    ]];
+                }
             }
         } else {
             $existingBranch = [];
@@ -1347,11 +1362,11 @@ class SettingsPage {
                 </tr>
                 <tr>
                     <th><?= esc_html__('Valor FACTURA', 'apisunatv2') ?></th>
-                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_key_value_01]" value="<?= esc_attr($mapping['value_01'] ?? '01') ?>" placeholder="01" class="regular-text"></td>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_value_01]" value="<?= esc_attr($mapping['value_01'] ?? '01') ?>" placeholder="01" class="regular-text"></td>
                 </tr>
                 <tr>
                     <th><?= esc_html__('Valor BOLETA', 'apisunatv2') ?></th>
-                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_key_value_03]" value="<?= esc_attr($mapping['value_03'] ?? '03') ?>" placeholder="03" class="regular-text"></td>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_value_03]" value="<?= esc_attr($mapping['value_03'] ?? '03') ?>" placeholder="03" class="regular-text"></td>
                 </tr>
                 <tr>
                     <th><?= esc_html__('Key Tipo Doc.', 'apisunatv2') ?></th>
