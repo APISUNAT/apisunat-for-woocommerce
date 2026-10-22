@@ -19,7 +19,7 @@ class DocumentConsultaService {
             return null;
         }
 
-        Logger::instance()->info('RUC consulted', ['ruc' => $ruc]);
+        Logger::instance()->info('RUC consulted');
 
         $domicilio = $data['domicilio'] ?? [];
 
@@ -41,7 +41,7 @@ class DocumentConsultaService {
             return null;
         }
 
-        Logger::instance()->info('DNI consulted', ['dni' => $dni]);
+        Logger::instance()->info('DNI consulted');
 
         $name = trim(
             ($data['nombre']           ?? '') . ' ' .

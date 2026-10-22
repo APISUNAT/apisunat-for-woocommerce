@@ -4,6 +4,7 @@ namespace Atm\Apisunatwp\Admin;
 use Atm\Apisunatwp\Config\Catalogs;
 use Atm\Apisunatwp\Config\Options;
 use Atm\Apisunatwp\Services\ApiSunatService;
+use Atm\Apisunatwp\Services\DocumentConsultaService;
 
 class OrderMetaBox {
 
@@ -12,6 +13,7 @@ class OrderMetaBox {
         add_action('add_meta_boxes_woocommerce_page_wc-orders',       [self::class, 'metaBox']);
         add_action('woocommerce_admin_order_data_after_billing_address', [self::class, 'billingMeta']);
         add_action('woocommerce_process_shop_order_meta',                [self::class, 'saveOrderMeta']);
+        add_action('wp_ajax_apisunat_admin_consult_document',             [self::class, 'ajaxConsultDocument']);
     }
 
     public static function metaBox(): void {
@@ -46,7 +48,7 @@ class OrderMetaBox {
         if ($branchKey !== '') {
             $branchId = (string) $order->get_meta($branchKey);
             if ($branchId !== '') {
-                $branch = Options::getBranch($branchId);
+                $branch = Options::getBranchByValue($branchId);
                 if ($branch !== null && isset($branch['detraction'])) {
                     $branchDetraction = $branch['detraction'];
                 }
@@ -300,10 +302,10 @@ class OrderMetaBox {
                     var icon = this;
                     icon.classList.add('apisunat-loading');
                     var data = new FormData();
-                    data.append('action', 'apisunat_consult_document');
+                    data.append('action', 'apisunat_admin_consult_document');
                     data.append('doc_type', t);
                     data.append('doc_number', n);
-                    data.append('nonce', '<?= esc_js(wp_create_nonce(\Atm\Apisunatwp\Hooks\CheckoutHooks::NONCE_ACTION)) ?>');
+                    data.append('nonce', '<?= esc_js(wp_create_nonce(OrderActions::NONCE_ACTION)) ?>');
                     fetch(ajaxurl, { method: 'POST', body: data })
                         .then(function(r) { return r.json(); })
                         .then(function(res) {
@@ -335,6 +337,29 @@ class OrderMetaBox {
         })();
         </script>
         <?php
+    }
+
+    public static function ajaxConsultDocument(): void {
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(['message' => __('Permiso denegado', 'apisunatv2')], 403);
+        }
+        check_ajax_referer(OrderActions::NONCE_ACTION, 'nonce');
+
+        $docType = isset($_POST['doc_type']) ? sanitize_text_field(wp_unslash($_POST['doc_type'])) : '';
+        $docNumber = isset($_POST['doc_number']) ? sanitize_text_field(wp_unslash($_POST['doc_number'])) : '';
+        if ($docType === '6') {
+            $result = DocumentConsultaService::consultRuc($docNumber);
+        } elseif ($docType === '1') {
+            $result = DocumentConsultaService::consultDni($docNumber);
+        } else {
+            wp_send_json_error(['message' => __('Tipo de documento no soportado', 'apisunatv2')], 400);
+        }
+
+        if (!$result) {
+            wp_send_json_error(['message' => __('No se encontró información', 'apisunatv2')], 404);
+        }
+
+        wp_send_json_success($result);
     }
 
     public static function saveOrderMeta(int|string $order_id): void {

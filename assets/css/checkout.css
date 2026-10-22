@@ -7,6 +7,9 @@
     cursor: pointer;
     position: relative;
     color: #666;
+    padding: 0;
+    border: 0;
+    background: transparent;
 }
 .apisunat-search-icon::before {
     content: '\1F50D';

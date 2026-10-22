@@ -646,11 +646,14 @@ class ApiSunatService {
             'gre_data'    => $grePayload,
         ];
 
-        self::logger()->info('GRE Payload', ['payload' => $payload]);
+        self::logger()->info('Sending GRE request', ['order_id' => $order_id]);
 
         $response = self::request('POST', self::API_URL, $payload);
 
-        self::logger()->info('GRE response', ['order_id' => $order_id, 'response' => $response]);
+        self::logger()->info('GRE response received', [
+            'order_id' => $order_id,
+            'status' => (string) ($response['status'] ?? 'unknown'),
+        ]);
 
         if (isset($response['status']) && $response['status'] === 'ERROR') {
             $error = $response['error'] ?? __('Error al emitir GRE', 'apisunatv2');
@@ -670,14 +673,18 @@ class ApiSunatService {
         if ($docId === '') {
             return;
         }
+        $currentStatus = (string) $order->get_meta('_gre_status');
 
         try {
             $response = self::request('GET', self::BASE_URL . '/documents/' . rawurlencode($docId) . '/getById');
             if (isset($response['status']) && is_string($response['status'])) {
                 $newStatus = $response['status'];
-                $order->update_meta_data('_gre_status', $newStatus);
-                $order->save();
-                $order->add_order_note(sprintf(__('Estado GRE actualizado: %s', 'apisunatv2'), $newStatus));
+                if ($newStatus !== $currentStatus) {
+                    $order->update_meta_data('_gre_status', $newStatus);
+                    $order->save();
+                    $order->add_order_note(sprintf(__('Estado GRE actualizado: %s', 'apisunatv2'), $newStatus));
+                    $currentStatus = $newStatus;
+                }
             }
         } catch (\Throwable $e) {
             self::logger()->warning('GRE status check failed', [
@@ -686,7 +693,6 @@ class ApiSunatService {
             ]);
         }
 
-        $currentStatus = (string) $order->get_meta('_gre_status');
         if ($currentStatus === 'PENDIENTE' && function_exists('as_schedule_single_action')) {
             as_schedule_single_action(
                 time() + 120,
