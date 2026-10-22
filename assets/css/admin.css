@@ -176,13 +176,14 @@
     margin-left: 6px;
     vertical-align: middle;
     cursor: pointer;
-    position: absolute;
+    position: relative;
     color: #666;
-    right: 10px;
-    top: calc(50% - 8px);
+    padding: 0;
+    border: 0;
+    background: transparent;
 }
 .apisunat-search-icon::before {
-    content: '\\1F50D';
+    content: '\1F50D';
     font-size: 16px;
     line-height: 1;
 }

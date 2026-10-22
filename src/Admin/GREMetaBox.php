@@ -62,7 +62,7 @@ class GREMetaBox {
             if ($branchKey !== '') {
                 $branchId = (string) $order->get_meta($branchKey);
                 if ($branchId !== '') {
-                    $branch = Options::getBranch($branchId);
+                    $branch = Options::getBranchByValue($branchId);
                     if ($branch !== null && isset($branch['gre'])) {
                         $greDefaults = $branch['gre'];
                     }

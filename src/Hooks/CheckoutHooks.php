@@ -9,7 +9,7 @@ class CheckoutHooks {
     public const NONCE_ACTION = 'apisunatv2_checkout_nonce';
 
     public static function register(): void {
-        if (Options::getValue('advanced.custom_checkout')) {
+        if (Options::getValue('settings.custom_checkout')) {
             return;
         }
 
@@ -316,18 +316,23 @@ class CheckoutHooks {
             return;
         }
 
+        $pluginPath = dirname(__DIR__, 2);
+        $cssPath = $pluginPath . '/assets/css/checkout.css';
+        $jsPath = $pluginPath . '/assets/js/checkout.js';
+        $fallbackVersion = defined('APISUNATWP_VERSION') ? APISUNATWP_VERSION : '1.0.0';
+
         wp_enqueue_style(
             'apisunatv2-checkout',
-            plugins_url('assets/css/checkout.css', dirname(__DIR__, 2) . '/apisunatwp.php'),
+            plugins_url('assets/css/checkout.css', $pluginPath . '/apisunatwp.php'),
             [],
-            defined('APISUNATWP_VERSION') ? APISUNATWP_VERSION : '1.0.0'
+            file_exists($cssPath) ? (string) filemtime($cssPath) : $fallbackVersion
         );
 
         wp_enqueue_script(
             'apisunatv2-checkout',
-            plugins_url('assets/js/checkout.js', dirname(__DIR__, 2) . '/apisunatwp.php'),
+            plugins_url('assets/js/checkout.js', $pluginPath . '/apisunatwp.php'),
             ['jquery'],
-            defined('APISUNATWP_VERSION') ? APISUNATWP_VERSION : '1.0.0',
+            file_exists($jsPath) ? (string) filemtime($jsPath) : $fallbackVersion,
             true
         );
 
