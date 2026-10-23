@@ -133,8 +133,12 @@ class SettingsPage {
         if (isset($input['settings']) && is_array($input['settings'])) {
             $output['settings']['debug']           = !empty($input['settings']['debug']);
             $output['settings']['custom_checkout'] = !empty($input['settings']['custom_checkout']);
-            $output['settings']['multi_branch']     = !empty($input['settings']['multi_branch']);
-            $output['settings']['multi_branch_key']  = sanitize_text_field((string) ($input['settings']['multi_branch_key'] ?? ''));
+            $output['settings']['multi_branch']     = array_key_exists('multi_branch', $input['settings'])
+                ? !empty($input['settings']['multi_branch'])
+                : (bool) Options::getValue('settings.multi_branch', false);
+            $output['settings']['multi_branch_key']  = sanitize_text_field((string) (
+                $input['settings']['multi_branch_key'] ?? Options::getValue('settings.multi_branch_key', '')
+            ));
 
             if (isset($input['settings']['tax_rate_mapping']) && is_array($input['settings']['tax_rate_mapping'])) {
                 $allowedMap = ['gravado10', 'gravado105', 'gravado18', 'exonerado', 'inafecto'];
@@ -150,7 +154,7 @@ class SettingsPage {
                 $mapping = $input['settings']['checkout_mapping'];
                 foreach ([
                     'document_type_key', 'customer_id_type_key', 'customer_id_key',
-                    'document_type_key_value_01', 'document_type_key_value_03',
+                    'document_type_value_01', 'document_type_value_03',
                         'customer_id_type_value_-', 'customer_id_type_value_1', 'customer_id_type_value_6', 'customer_id_type_value_H', 'customer_id_type_value_7',
                         'customer_id_type_value_4', 'customer_id_type_value_E', 'customer_id_type_value_A', 'customer_id_type_value_G',
                         'customer_id_type_value_C', 'customer_id_type_value_D', 'customer_id_type_value_B', 'customer_id_type_value_0',
@@ -220,9 +224,24 @@ class SettingsPage {
                         $sanitizedGre['transportista']['ruc']    = sanitize_text_field((string) ($g['transportista']['ruc'] ?? ''));
                         $sanitizedGre['transportista']['mtc']    = sanitize_text_field((string) ($g['transportista']['mtc'] ?? ''));
                     }
+                    if (isset($g['vehiculo']) && is_array($g['vehiculo'])) {
+                        $sanitizedGre['vehiculo']['placa']        = sanitize_text_field((string) ($g['vehiculo']['placa'] ?? ''));
+                        $sanitizedGre['vehiculo']['autorizacion'] = sanitize_text_field((string) ($g['vehiculo']['autorizacion'] ?? ''));
+                        $sanitizedGre['vehiculo']['entidad']      = sanitize_text_field((string) ($g['vehiculo']['entidad'] ?? ''));
+                    }
+                    if (isset($g['conductor']) && is_array($g['conductor'])) {
+                        $sanitizedGre['conductor']['tipo_documento']   = sanitize_text_field((string) ($g['conductor']['tipo_documento'] ?? ''));
+                        $sanitizedGre['conductor']['numero_documento'] = sanitize_text_field((string) ($g['conductor']['numero_documento'] ?? ''));
+                        $sanitizedGre['conductor']['nombres']           = sanitize_text_field((string) ($g['conductor']['nombres'] ?? ''));
+                        $sanitizedGre['conductor']['apellidos']         = sanitize_text_field((string) ($g['conductor']['apellidos'] ?? ''));
+                        $sanitizedGre['conductor']['licencia']          = sanitize_text_field((string) ($g['conductor']['licencia'] ?? ''));
+                    }
                     if (isset($g['partida']) && is_array($g['partida'])) {
-                        $sanitizedGre['partida']['ubigeo']    = sanitize_text_field((string) ($g['partida']['ubigeo'] ?? ''));
-                        $sanitizedGre['partida']['direccion'] = sanitize_text_field((string) ($g['partida']['direccion'] ?? ''));
+                        $sanitizedGre['partida']['departamento'] = sanitize_text_field((string) ($g['partida']['departamento'] ?? ''));
+                        $sanitizedGre['partida']['provincia']    = sanitize_text_field((string) ($g['partida']['provincia'] ?? ''));
+                        $sanitizedGre['partida']['distrito']     = sanitize_text_field((string) ($g['partida']['distrito'] ?? ''));
+                        $sanitizedGre['partida']['ubigeo']        = sanitize_text_field((string) ($g['partida']['ubigeo'] ?? ''));
+                        $sanitizedGre['partida']['direccion']     = sanitize_text_field((string) ($g['partida']['direccion'] ?? ''));
                     }
                     $existing[$i]['gre'] = $sanitizedGre;
                 }
@@ -232,16 +251,27 @@ class SettingsPage {
 
         Options::flushCache();
 
-        if (!empty($output['settings']['multi_branch'])) {
+        $multiBranchEnabled = array_key_exists('multi_branch', $output['settings'] ?? [])
+            ? !empty($output['settings']['multi_branch'])
+            : (bool) Options::getValue('settings.multi_branch', false);
+
+        if ($multiBranchEnabled) {
             if (empty($output['branches'])) {
                 $existing = Options::get();
-                $output['branches'] = [[
-                    'branch_name' => __('Sucursal 1', 'apisunatv2'),
-                    'api'        => $existing['api'] ?? [],
-                    'issue'    => $existing['issue'] ?? [],
-                    'detraction' => $existing['detraction'] ?? [],
-                    'gre'      => $existing['gre'] ?? [],
-                ]];
+                if (!empty($existing['branches']) && is_array($existing['branches'])) {
+                    // Settings-only forms (such as changing the branch meta key)
+                    // do not submit branch fields; preserve every saved branch.
+                    $output['branches'] = $existing['branches'];
+                } else {
+                    // First activation: migrate the current single-branch values.
+                    $output['branches'] = [[
+                        'branch_name' => __('Sucursal 1', 'apisunatv2'),
+                        'api'         => $existing['api'] ?? [],
+                        'issue'       => $existing['issue'] ?? [],
+                        'detraction'  => $existing['detraction'] ?? [],
+                        'gre'          => $existing['gre'] ?? [],
+                    ]];
+                }
             }
         } else {
             $existingBranch = [];
@@ -1122,7 +1152,7 @@ class SettingsPage {
         <div class="form-field form-field-wide" style="margin:0 0 8px;">
             <label class="checkbox style-e" for="<?= esc_attr($id('vehiculo_categoria')) ?>">
                 <input type="hidden" name="<?= esc_attr($name('vehiculo_categoria')) ?>" value="0" />
-                <input type="checkbox" id="<?= esc_attr($id('vehiculo_categoria')) ?>" name="<?= esc_attr($name('vehiculo_categoria')) ?>" value="1" />
+                <input type="checkbox" id="<?= esc_attr($id('vehiculo_categoria')) ?>" name="<?= esc_attr($name('vehiculo_categoria')) ?>" value="1" <?php checked($val('vehiculo_categoria', false)); ?> />
                 <div class="checkbox__checkmark"></div>
             </label>
             <span style="margin-left:50px;display:inline-block;vertical-align:middle"><?= esc_html__('Vehículos Categoría M1 o L', 'apisunatv2') ?></span>
@@ -1347,11 +1377,11 @@ class SettingsPage {
                 </tr>
                 <tr>
                     <th><?= esc_html__('Valor FACTURA', 'apisunatv2') ?></th>
-                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_key_value_01]" value="<?= esc_attr($mapping['value_01'] ?? '01') ?>" placeholder="01" class="regular-text"></td>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_value_01]" value="<?= esc_attr($mapping['document_type_value_01'] ?? '01') ?>" placeholder="01" class="regular-text"></td>
                 </tr>
                 <tr>
                     <th><?= esc_html__('Valor BOLETA', 'apisunatv2') ?></th>
-                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_key_value_03]" value="<?= esc_attr($mapping['value_03'] ?? '03') ?>" placeholder="03" class="regular-text"></td>
+                    <td><input type="text" name="<?= esc_attr($prefix) ?>[document_type_value_03]" value="<?= esc_attr($mapping['document_type_value_03'] ?? '03') ?>" placeholder="03" class="regular-text"></td>
                 </tr>
                 <tr>
                     <th><?= esc_html__('Key Tipo Doc.', 'apisunatv2') ?></th>

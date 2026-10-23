@@ -36,6 +36,25 @@ class Options {
             }
         }
 
+        if (!empty($saved['settings']['checkout_mapping']) && is_array($saved['settings']['checkout_mapping'])) {
+            $mapping = &$saved['settings']['checkout_mapping'];
+            foreach ([
+                'document_type_value_01' => ['document_type_key_value_01', 'value_01'],
+                'document_type_value_03' => ['document_type_key_value_03', 'value_03'],
+            ] as $newKey => $legacyKeys) {
+                if (array_key_exists($newKey, $mapping)) {
+                    continue;
+                }
+                foreach ($legacyKeys as $legacyKey) {
+                    if (array_key_exists($legacyKey, $mapping)) {
+                        $mapping[$newKey] = $mapping[$legacyKey];
+                        break;
+                    }
+                }
+            }
+            unset($mapping);
+        }
+
         $saved['branches'] = self::getAllBranches();
 
         self::$cache = array_replace_recursive($defaults, $saved);
@@ -110,6 +129,32 @@ class Options {
         return is_array($data) ? $data : null;
     }
 
+    public static function getBranchByValue(string $value): ?array {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        $branch = self::getBranch($value);
+        if ($branch !== null) {
+            return $branch;
+        }
+
+        foreach (self::getBranchIds() as $id) {
+            $id = (string) $id;
+            $candidate = self::getBranch($id);
+            if ($candidate === null) {
+                continue;
+            }
+            $name = (string) ($candidate['branch_name'] ?? '');
+            if ($value === $id || ($name !== '' && sanitize_title($value) === sanitize_title($name))) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
     public static function getAllBranches(): array {
         $ids   = self::getBranchIds();
         $branches = [];
@@ -161,6 +206,36 @@ class Options {
     }
 
     public static function resolveBranch(?\WC_Order $order = null): array {
+        $multiBranch = (bool) self::getValue('settings.multi_branch', false);
+        $branchKey = (string) self::getValue('settings.multi_branch_key', '');
+
+        if ($order && $multiBranch && $branchKey !== '') {
+            $branchValue = trim((string) $order->get_meta($branchKey, true));
+            $branch = self::getBranchByValue($branchValue);
+
+            // Do not silently emit an order with the global account when its branch is unresolved.
+            if ($branch === null) {
+                return [
+                    'personaId' => '',
+                    'personaToken' => '',
+                    'serie01' => '',
+                    'serie03' => '',
+                    'serie07F' => '',
+                    'serie07B' => '',
+                ];
+            }
+
+            $api = is_array($branch['api'] ?? null) ? $branch['api'] : [];
+            return [
+                'personaId' => (string) ($api['personaId'] ?? ''),
+                'personaToken' => (string) ($api['personaToken'] ?? ''),
+                'serie01' => (string) ($api['serie01'] ?? ''),
+                'serie03' => (string) ($api['serie03'] ?? ''),
+                'serie07F' => (string) ($api['serie07F'] ?? ''),
+                'serie07B' => (string) ($api['serie07B'] ?? ''),
+            ];
+        }
+
         $personaId    = (string) self::getValue('api.personaId', '');
         $personaToken = (string) self::getValue('api.personaToken', '');
         $serie01  = (string) self::getValue('api.serie01', '');
@@ -206,8 +281,8 @@ class Options {
         $cpeType = '';
         if (!empty($mapping['document_type_key'])) {
             $raw = (string) $order->get_meta($mapping['document_type_key']);
-            $cpeFactura = $mapping['document_type_key_value_01'] ?? '01';
-            $cpeBoleta  = $mapping['document_type_key_value_03'] ?? '03';
+            $cpeFactura = $mapping['document_type_value_01'] ?? '01';
+            $cpeBoleta  = $mapping['document_type_value_03'] ?? '03';
             if ($raw === $cpeFactura) $cpeType = '01';
             elseif ($raw === $cpeBoleta) $cpeType = '03';
         }

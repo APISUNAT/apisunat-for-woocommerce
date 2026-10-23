@@ -44,7 +44,7 @@
 
             if (!docType.length) return;
 
-            var loading = $('<span class="apisunat-search-icon" aria-hidden="true"></span>');
+            var loading = $('<button type="button" class="apisunat-search-icon" aria-label="Consultar documento" title="Consultar documento"></button>');
             docNumber.parent().append(loading);
 
             function updatePlaceholders() {
@@ -91,6 +91,10 @@
             docType.on('change', function () { updatePlaceholders(); consult(); });
             cpeType.on('change', toggleCompany);
             docNumber.on('input', consult);
+            loading.on('click', function (event) {
+                event.preventDefault();
+                consult();
+            });
             updatePlaceholders();
             toggleCompany();
         });
